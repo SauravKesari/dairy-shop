@@ -1,0 +1,6 @@
+{
+  "name": "Dairy Parlour Management System",
+  "description": "Point-of-sale billing, stock movement tracking, expiry alerts, customer udhaar credit ledger, expense tracking, and daily cash closing for dairy parlours.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

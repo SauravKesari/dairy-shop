@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dairy_parlour_app
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SHOP_DOMAIN=${SHOP_DOMAIN:-localhost}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - dairy_net
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  dairy_net:
+    driver: bridge

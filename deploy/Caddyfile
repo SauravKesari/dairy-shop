@@ -1,0 +1,23 @@
+# Production Caddyfile (Auto HTTPS via Let's Encrypt / ZeroSSL)
+# Replace shop.yourdomain.in with your actual domain or use :80 for local network testing
+
+{$SHOP_DOMAIN:localhost} {
+    encode gzip zstd
+
+    root * /srv
+    try_files {path} /index.html
+    file_server
+
+    # Security headers
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Logging
+    log {
+        output stdout
+        format console
+    }
+}
