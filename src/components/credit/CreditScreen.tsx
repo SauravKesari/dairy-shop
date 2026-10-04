@@ -53,7 +53,7 @@ export const CreditScreen: React.FC = () => {
 
   const totalOutstandingDues = customers.reduce((sum, c) => sum + c.current_dues, 0);
 
-  const handleConfirmPayment = (e: React.FormEvent) => {
+  const handleConfirmPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!paymentCustomer) return;
     setPaymentError(null);
@@ -63,7 +63,7 @@ export const CreditScreen: React.FC = () => {
       return;
     }
 
-    const res = recordCustomerPayment(
+    const res = await recordCustomerPayment(
       paymentCustomer.id,
       paymentAmount,
       paymentMode,
@@ -80,14 +80,14 @@ export const CreditScreen: React.FC = () => {
     setPaymentNote('');
   };
 
-  const handleCreateCustomer = (e: React.FormEvent) => {
+  const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCustName.trim()) return;
 
     const limit = newCustLimit ? parseFloat(newCustLimit) : null;
     const opening = newCustOpeningDue ? parseFloat(newCustOpeningDue) : 0;
 
-    addCustomer(
+    const res = await addCustomer(
       {
         name: newCustName.trim(),
         mobile: newCustMobile.trim() || '9800000000',
@@ -96,6 +96,10 @@ export const CreditScreen: React.FC = () => {
       },
       opening
     );
+    if (!res.success) {
+      alert(res.error || 'Failed to add customer');
+      return;
+    }
 
     setShowAddModal(false);
     setNewCustName('');

@@ -65,7 +65,7 @@ export const PurchasesScreen: React.FC = () => {
     return purchaseLines.reduce((acc, l) => acc + (l.qty || 0) * (l.unit_cost || 0), 0);
   };
 
-  const handleSavePurchase = (e: React.FormEvent) => {
+  const handleSavePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     setPurchaseError(null);
 
@@ -80,7 +80,7 @@ export const PurchasesScreen: React.FC = () => {
       return;
     }
 
-    const res = createPurchase({
+    const res = await createPurchase({
       supplier_id: selectedSupplierId,
       supplier_invoice_no: supplierInvoiceNo.trim() || `CRATE-${Date.now().toString().slice(-4)}`,
       purchase_date: purchaseDate,
@@ -107,16 +107,20 @@ export const PurchasesScreen: React.FC = () => {
     setPurchaseLines([{ product_id: '', qty: 10, unit_cost: 0, expiry_date: '' }]);
   };
 
-  const handleSaveSupplier = (e: React.FormEvent) => {
+  const handleSaveSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSupName.trim()) return;
 
-    addSupplier({
+    const res = await addSupplier({
       name: newSupName.trim(),
       mobile: newSupMobile.trim() || '9898000000',
       address: newSupAddress.trim(),
       gst_number: newSupGst.trim() || undefined,
     });
+    if (!res.success) {
+      alert(res.error || 'Failed to add supplier');
+      return;
+    }
 
     setShowAddSupplierModal(false);
     setNewSupName('');

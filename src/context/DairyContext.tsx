@@ -1,4 +1,30 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { onAuthStateChanged, signOut, User as FirebaseUser, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
+import {
+  collection,
+  doc,
+  onSnapshot,
+  query,
+  where,
+  writeBatch,
+  runTransaction,
+  increment,
+  deleteField,
+  DocumentReference,
+  DocumentData,
+  Query,
+  WriteBatch,
+} from 'firebase/firestore';
+import {
+  auth,
+  db,
+  isFirebaseConfigured,
+  createAuthUser,
+  friendlyFirebaseError,
+  mobileToEmail,
+  HISTORY_DAYS,
+  MIN_PIN_LENGTH,
+} from '../lib/firebase';
 import {
   User,
   Settings,
@@ -18,7 +44,6 @@ import {
 } from '../types';
 import {
   initialSettings,
-  initialUsers,
   initialCategories,
   initialProducts,
   initialSuppliers,
@@ -31,6 +56,7 @@ import {
   initialDailyClosings,
   initialAuditLogs,
 } from '../data/initialData';
+import { LoginScreen, AuthStatus } from '../components/auth/LoginScreen';
 
 interface NewSaleItemInput {
   product_id: string;
@@ -65,37 +91,40 @@ interface NewPurchaseInput {
   items: NewPurchaseLineInput[];
 }
 
+export type Result = { success: boolean; error?: string };
+
 interface DairyContextType {
   currentUser: User;
-  setCurrentUser: (user: User) => void;
+  signOutUser: () => Promise<void>;
+  historyDays: number;
   users: User[];
   settings: Settings;
-  updateSettings: (newSettings: Partial<Settings>) => void;
+  updateSettings: (newSettings: Partial<Settings>) => Promise<Result>;
   categories: Category[];
-  addCategory: (name: string) => void;
+  addCategory: (name: string) => Promise<Result>;
   products: Product[];
-  addProduct: (product: Omit<Product, 'id' | 'current_stock' | 'created_at' | 'updated_at'>, opening_stock?: number) => void;
-  updateProduct: (id: string, updates: Partial<Product>) => void;
-  toggleProductActive: (id: string) => void;
+  addProduct: (product: Omit<Product, 'id' | 'current_stock' | 'created_at' | 'updated_at'>, opening_stock?: number) => Promise<Result>;
+  updateProduct: (id: string, updates: Partial<Product>) => Promise<Result>;
+  toggleProductActive: (id: string) => Promise<Result>;
   suppliers: Supplier[];
-  addSupplier: (supplier: Omit<Supplier, 'id' | 'active'>) => void;
-  updateSupplier: (id: string, updates: Partial<Supplier>) => void;
+  addSupplier: (supplier: Omit<Supplier, 'id' | 'active'>) => Promise<Result>;
+  updateSupplier: (id: string, updates: Partial<Supplier>) => Promise<Result>;
   customers: Customer[];
-  addCustomer: (cust: Omit<Customer, 'id' | 'active' | 'current_dues'>, opening_due?: number) => Customer;
-  updateCustomer: (id: string, updates: Partial<Customer>) => void;
+  addCustomer: (cust: Omit<Customer, 'id' | 'active' | 'current_dues'>, opening_due?: number) => Promise<Result & { customer?: Customer }>;
+  updateCustomer: (id: string, updates: Partial<Customer>) => Promise<Result>;
   sales: Sale[];
-  createSale: (input: NewSaleInput) => { success: boolean; sale?: Sale; error?: string };
-  cancelSale: (saleId: string, reason: string) => { success: boolean; error?: string };
+  createSale: (input: NewSaleInput) => Promise<Result & { sale?: Sale }>;
+  cancelSale: (saleId: string, reason: string) => Promise<Result>;
   purchases: Purchase[];
-  createPurchase: (input: NewPurchaseInput) => { success: boolean; error?: string };
+  createPurchase: (input: NewPurchaseInput) => Promise<Result>;
   stockMovements: StockMovement[];
-  adjustStock: (productId: string, type: 'damage' | 'expired' | 'adjustment', qtyChange: number, reason: string) => { success: boolean; error?: string };
+  adjustStock: (productId: string, type: 'damage' | 'expired' | 'adjustment', qtyChange: number, reason: string) => Promise<Result>;
   customerLedger: CustomerLedgerEntry[];
-  recordCustomerPayment: (customerId: string, amount: number, paymentMethod: 'cash' | 'upi', note?: string) => { success: boolean; error?: string };
+  recordCustomerPayment: (customerId: string, amount: number, paymentMethod: 'cash' | 'upi', note?: string) => Promise<Result>;
   expenses: Expense[];
-  addExpense: (expense: Omit<Expense, 'id' | 'created_by' | 'created_by_name' | 'created_at'>) => { success: boolean; error?: string };
-  updateExpense: (id: string, updates: Partial<Expense>) => { success: boolean; error?: string };
-  deleteExpense: (id: string) => { success: boolean; error?: string };
+  addExpense: (expense: Omit<Expense, 'id' | 'created_by' | 'created_by_name' | 'created_at'>) => Promise<Result>;
+  updateExpense: (id: string, updates: Partial<Expense>) => Promise<Result>;
+  deleteExpense: (id: string) => Promise<Result>;
   dailyClosings: DailyClosing[];
   currentBusinessDate: string;
   setCurrentBusinessDate: (date: string) => void;
@@ -113,252 +142,350 @@ interface DairyContextType {
     difference?: number;
     status: 'closed' | 'open';
   };
-  saveDailyClosing: (date: string, openingCash: number, actualCash: number, note?: string) => { success: boolean; error?: string };
-  reopenDailyClosing: (date: string, reason: string) => { success: boolean; error?: string };
+  saveDailyClosing: (date: string, openingCash: number, actualCash: number, note?: string) => Promise<Result>;
+  reopenDailyClosing: (date: string, reason: string) => Promise<Result>;
   auditLogs: AuditLog[];
   expiryAlerts: ExpiryAlertItem[];
-  importProductsCSV: (csvText: string) => { success: boolean; count: number; error?: string };
-  importCustomerDuesCSV: (csvText: string) => { success: boolean; count: number; error?: string };
-  resetToDemoData: () => void;
+  importProductsCSV: (csvText: string) => Promise<Result & { count: number }>;
+  importCustomerDuesCSV: (csvText: string) => Promise<Result & { count: number }>;
+  loadDemoData: () => Promise<Result>;
   exportDatabaseJSON: () => string;
-  importDatabaseJSON: (jsonString: string) => { success: boolean; error?: string };
+  importDatabaseJSON: (jsonString: string) => Promise<Result>;
   // User management
-  addUser: (name: string, mobile: string, pin: string, role: 'owner' | 'cashier') => void;
-  updateUserPin: (userId: string, newPin: string) => void;
-  toggleUserActive: (userId: string) => void;
+  addUser: (name: string, mobile: string, pin: string, role: 'owner' | 'cashier') => Promise<Result>;
+  changeOwnPin: (currentPin: string, newPin: string) => Promise<Result>;
+  toggleUserActive: (userId: string) => Promise<Result>;
 }
 
 const DairyContext = createContext<DairyContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'gokul_dairy_v1_store';
+// Thrown inside transactions to abort with a message for the counter user
+class BusinessError extends Error {}
 
-export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load from localStorage or initial
-  const loadStored = <T,>(key: string, fallback: T): T => {
-    try {
-      const stored = localStorage.getItem(`${STORAGE_KEY}_${key}`);
-      return stored ? JSON.parse(stored) : fallback;
-    } catch (e) {
-      console.warn(`Error reading ${key} from storage:`, e);
-      return fallback;
+type Op = (b: WriteBatch) => void;
+const setOp = (ref: DocumentReference, data: DocumentData): Op => b => b.set(ref, data);
+const updateOp = (ref: DocumentReference, data: DocumentData): Op => b => b.update(ref, data);
+
+const r2 = (n: number) => Number(n.toFixed(2));
+const r3 = (n: number) => Number(n.toFixed(3));
+
+const localDate = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const newRef = (col: string) => doc(collection(db, col));
+
+const OFFLINE_SALE_ERROR =
+  'No internet connection. Sales need internet to lock stock and issue an invoice number — write a numbered paper bill now and enter it later as an offline entry.';
+
+// Online: wait for the server so rule rejections are shown. Offline: Firestore queues the write.
+const persist = async (write: Promise<unknown>): Promise<Result> => {
+  if (!navigator.onLine) {
+    write.catch(err => console.error('Queued write was rejected when it synced:', err));
+    return { success: true };
+  }
+  try {
+    await write;
+    return { success: true };
+  } catch (err) {
+    console.error(err);
+    return { success: false, error: friendlyFirebaseError(err) };
+  }
+};
+
+// Firestore batches hold max 500 writes; big imports are split
+const commitOps = (ops: Op[]): Promise<Result> => {
+  const commits: Promise<void>[] = [];
+  for (let i = 0; i < ops.length; i += 450) {
+    const batch = writeBatch(db);
+    ops.slice(i, i + 450).forEach(op => op(batch));
+    commits.push(batch.commit());
+  }
+  return persist(Promise.all(commits));
+};
+
+// Firestore ignores undefined fields; in partial updates they mean "clear this field"
+const toUpdate = (updates: Record<string, unknown>) => {
+  const out: Record<string, unknown> = {};
+  Object.entries(updates).forEach(([k, v]) => {
+    if (k !== 'id') out[k] = v === undefined ? deleteField() : v;
+  });
+  return out;
+};
+
+const byDesc = <T,>(key: keyof T) => (a: T, b: T) => String(b[key] ?? '').localeCompare(String(a[key] ?? ''));
+const byAsc = <T,>(key: keyof T) => (a: T, b: T) => String(a[key] ?? '').localeCompare(String(b[key] ?? ''));
+
+// Live-subscribes to a Firestore query and keeps it as a sorted array
+const useLiveCollection = <T,>(makeQuery: (() => Query) | null, sort?: (a: T, b: T) => number): [T[], boolean] => {
+  const [rows, setRows] = useState<T[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const enabled = makeQuery !== null;
+  useEffect(() => {
+    if (!makeQuery) {
+      setRows([]);
+      setLoaded(true);
+      return;
     }
+    return onSnapshot(
+      makeQuery(),
+      snap => {
+        const data = snap.docs.map(d => ({ ...d.data(), id: d.id }) as T);
+        if (sort) data.sort(sort);
+        setRows(data);
+        setLoaded(true);
+      },
+      err => {
+        console.error('Firestore subscription failed:', err);
+        setLoaded(true);
+      }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]);
+  return [rows, loaded];
+};
+
+const FullScreenMessage: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6 font-sans">
+    <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 max-w-md w-full text-sm text-slate-700 space-y-2">
+      {children}
+    </div>
+  </div>
+);
+
+// Top-level provider: resolves Firebase login + staff profile, then mounts the data layer
+export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [authUser, setAuthUser] = useState<FirebaseUser | null | undefined>(undefined);
+  const [profile, setProfile] = useState<User | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (!isFirebaseConfigured) return;
+    return onAuthStateChanged(auth, u => setAuthUser(u));
+  }, []);
+
+  useEffect(() => {
+    if (!authUser) {
+      setProfile(authUser === null ? null : undefined);
+      return;
+    }
+    setProfile(undefined);
+    return onSnapshot(
+      doc(db, 'users', authUser.uid),
+      { includeMetadataChanges: true },
+      snap => {
+        // During first-time setup the profile is visible locally before the server has it; mounting the
+        // data listeners then would get them permission-denied, so wait until the write is committed.
+        if (snap.metadata.hasPendingWrites) return;
+        setProfile(snap.exists() ? ({ ...snap.data(), id: snap.id } as User) : null);
+      },
+      err => {
+        console.error('Failed to load staff profile:', err);
+        setProfile(null);
+      }
+    );
+  }, [authUser]);
+
+  if (!isFirebaseConfigured) {
+    return (
+      <FullScreenMessage>
+        <p className="font-bold text-slate-900">Firebase is not configured</p>
+        <p>
+          Copy <code>.env.example</code> to <code>.env.local</code>, fill in the <code>VITE_FIREBASE_*</code> values from
+          Firebase console → Project settings → Your apps, and restart <code>npm run dev</code>.
+        </p>
+      </FullScreenMessage>
+    );
+  }
+
+  let status: AuthStatus | null = null;
+  if (authUser === undefined) status = 'loading';
+  else if (authUser === null) status = 'signed_out';
+  else if (profile === undefined) status = 'loading';
+  else if (profile === null) status = 'no_profile';
+  else if (!profile.active) status = 'inactive';
+
+  if (status) return <LoginScreen status={status} />;
+
+  return <DairyDataProvider currentUser={profile!}>{children}</DairyDataProvider>;
+};
+
+const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode }> = ({ currentUser, children }) => {
+  const isOwner = currentUser.role === 'owner';
+
+  // History window for high-volume collections (Section: keeps Firestore reads in the free tier)
+  const { cutoffDate, cutoffIso } = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - HISTORY_DAYS);
+    return { cutoffDate: localDate(d), cutoffIso: d.toISOString() };
+  }, []);
+
+  const [settingsDoc, setSettingsDoc] = useState<Partial<Settings> | null>(null);
+  useEffect(
+    () =>
+      onSnapshot(
+        doc(db, 'settings', 'shop'),
+        snap => setSettingsDoc(snap.exists() ? (snap.data() as Settings) : {}),
+        err => {
+          console.error('Failed to load settings:', err);
+          setSettingsDoc({});
+        }
+      ),
+    []
+  );
+  const settings: Settings = { ...initialSettings, ...(settingsDoc || {}) };
+
+  const [users, usersLoaded] = useLiveCollection<User>(() => collection(db, 'users'), byAsc('created_at'));
+  const [categories, categoriesLoaded] = useLiveCollection<Category>(() => collection(db, 'categories'), byAsc('name'));
+  const [products, productsLoaded] = useLiveCollection<Product>(() => collection(db, 'products'), byAsc('created_at'));
+  const [suppliers] = useLiveCollection<Supplier>(() => collection(db, 'suppliers'), byAsc('name'));
+  const [customers, customersLoaded] = useLiveCollection<Customer>(() => collection(db, 'customers'), byAsc('name'));
+  const [purchases] = useLiveCollection<Purchase>(() => collection(db, 'purchases'), byDesc('created_at'));
+  const [customerLedger] = useLiveCollection<CustomerLedgerEntry>(() => collection(db, 'customer_ledger'), byAsc('created_at'));
+  const [expenses] = useLiveCollection<Expense>(() => collection(db, 'expenses'), byDesc('created_at'));
+  const [dailyClosings] = useLiveCollection<DailyClosing>(() => collection(db, 'daily_closings'), byDesc('business_date'));
+  const [sales, salesLoaded] = useLiveCollection<Sale>(
+    () => query(collection(db, 'sales'), where('business_date', '>=', cutoffDate)),
+    byDesc('created_at')
+  );
+  const [stockMovements] = useLiveCollection<StockMovement>(
+    () => query(collection(db, 'stock_movements'), where('created_at', '>=', cutoffIso)),
+    byDesc('created_at')
+  );
+  const [auditLogs] = useLiveCollection<AuditLog>(
+    isOwner ? () => query(collection(db, 'audit_logs'), where('created_at', '>=', cutoffIso)) : null,
+    byDesc('created_at')
+  );
+
+  const [currentBusinessDate, setCurrentBusinessDate] = useState<string>(() => localDate());
+
+  // Audit entry to be written in the same batch/transaction as the action it records
+  const auditEntry = (action: string, entity: string, entityId: string, details: Record<string, unknown>): [DocumentReference, AuditLog] => {
+    const ref = newRef('audit_logs');
+    return [
+      ref,
+      {
+        id: ref.id,
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        action,
+        entity,
+        entity_id: entityId,
+        details,
+        created_at: new Date().toISOString(),
+      },
+    ];
   };
-
-  const [settings, setSettings] = useState<Settings>(() => loadStored('settings', initialSettings));
-  const [users, setUsers] = useState<User[]>(() => loadStored('users', initialUsers));
-  const [currentUser, setCurrentUser] = useState<User>(() => users[0] || initialUsers[0]);
-  const [categories, setCategories] = useState<Category[]>(() => loadStored('categories', initialCategories));
-  const [products, setProducts] = useState<Product[]>(() => loadStored('products', initialProducts));
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => loadStored('suppliers', initialSuppliers));
-  const [customers, setCustomers] = useState<Customer[]>(() => loadStored('customers', initialCustomers));
-  const [sales, setSales] = useState<Sale[]>(() => loadStored('sales', initialSales));
-  const [purchases, setPurchases] = useState<Purchase[]>(() => loadStored('purchases', initialPurchases));
-  const [stockMovements, setStockMovements] = useState<StockMovement[]>(() => loadStored('stock_movements', initialStockMovements));
-  const [customerLedger, setCustomerLedger] = useState<CustomerLedgerEntry[]>(() => loadStored('customer_ledger', initialCustomerLedger));
-  const [expenses, setExpenses] = useState<Expense[]>(() => loadStored('expenses', initialExpenses));
-  const [dailyClosings, setDailyClosings] = useState<DailyClosing[]>(() => loadStored('daily_closings', initialDailyClosings));
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => loadStored('audit_logs', initialAuditLogs));
-  
-  // Default system date: 2026-10-02 (allows easy testing of past dates & today)
-  const [currentBusinessDate, setCurrentBusinessDate] = useState<string>('2026-10-02');
-
-  // Sync to localStorage
-  useEffect(() => { localStorage.setItem(`${STORAGE_KEY}_settings`, JSON.stringify(settings)); }, [settings]);
-  useEffect(() => { localStorage.setItem(`${STORAGE_KEY}_users`, JSON.stringify(users)); }, [users]);
-  useEffect(() => { localStorage.setItem(`${STORAGE_KEY}_categories`, JSON.stringify(categories)); }, [categories]);
-  useEffect(() => { localStorage.setItem(`${STORAGE_KEY}_products`, JSON.stringify(products)); }, [products]);
-  useEffect(() => { localStorage.setItem(`${STORAGE_KEY}_suppliers`, JSON.stringify(suppliers)); }, [suppliers]);
-  useEffect(() => { localStorage.setItem(`${STORAGE_KEY}_customers`, JSON.stringify(customers)); }, [customers]);
-  useEffect(() => { localStorage.setItem(`${STORAGE_KEY}_sales`, JSON.stringify(sales)); }, [sales]);
-  useEffect(() => { localStorage.setItem(`${STORAGE_KEY}_purchases`, JSON.stringify(purchases)); }, [purchases]);
-  useEffect(() => { localStorage.setItem(`${STORAGE_KEY}_stock_movements`, JSON.stringify(stockMovements)); }, [stockMovements]);
-  useEffect(() => { localStorage.setItem(`${STORAGE_KEY}_customer_ledger`, JSON.stringify(customerLedger)); }, [customerLedger]);
-  useEffect(() => { localStorage.setItem(`${STORAGE_KEY}_expenses`, JSON.stringify(expenses)); }, [expenses]);
-  useEffect(() => { localStorage.setItem(`${STORAGE_KEY}_daily_closings`, JSON.stringify(dailyClosings)); }, [dailyClosings]);
-  useEffect(() => { localStorage.setItem(`${STORAGE_KEY}_audit_logs`, JSON.stringify(auditLogs)); }, [auditLogs]);
-
-  // Audit Log helper
-  const logAudit = (action: string, entity: string, entityId: string, details: Record<string, unknown>) => {
-    const entry: AuditLog = {
-      id: `aud-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      user_id: currentUser.id,
-      user_name: currentUser.name,
-      action,
-      entity,
-      entity_id: entityId,
-      details,
-      created_at: new Date().toISOString(),
-    };
-    setAuditLogs(prev => [entry, ...prev]);
-  };
+  const auditOp = (...args: Parameters<typeof auditEntry>): Op => setOp(...auditEntry(...args));
 
   const isDateClosed = (date: string) => {
     const closing = dailyClosings.find(c => c.business_date === date);
     return closing ? closing.status === 'closed' : false;
   };
 
-  // Add stock movement - Rule 2: Stock changes ONLY through one service function add_stock_movement()
-  const addStockMovement = (
-    productId: string,
+  const movementRecord = (
+    product: Pick<Product, 'id' | 'name'>,
     type: StockMovement['type'],
     qty: number,
-    refType: 'opening' | 'purchase' | 'sale' | 'adjustment',
-    refId?: string,
-    reason?: string,
-  ): { success: boolean; error?: string } => {
-    const product = products.find(p => p.id === productId);
-    if (!product) return { success: false, error: 'Product not found' };
-
-    const newStock = Number((product.current_stock + qty).toFixed(3));
-    if (!settings.allow_negative_stock && newStock < 0) {
-      return {
-        success: false,
-        error: `Insufficient stock for ${product.name}. Available: ${product.current_stock} ${product.unit}, requested deduction: ${Math.abs(qty)} ${product.unit}`,
-      };
-    }
-
-    const movement: StockMovement = {
-      id: `sm-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      product_id: productId,
-      product_name: product.name,
-      type,
-      qty,
-      ref_type: refType,
-      ref_id: refId,
-      reason,
-      created_by: currentUser.id,
-      created_at: new Date().toISOString(),
-    };
-
-    setStockMovements(prev => [movement, ...prev]);
-    setProducts(prev =>
-      prev.map(p =>
-        p.id === productId
-          ? { ...p, current_stock: newStock, updated_at: new Date().toISOString() }
-          : p
-      )
-    );
-
-    return { success: true };
+    refType: StockMovement['ref_type'],
+    refId: string | undefined,
+    reason: string | undefined,
+    nowIso: string
+  ): [DocumentReference, StockMovement] => {
+    const ref = newRef('stock_movements');
+    return [
+      ref,
+      {
+        id: ref.id,
+        product_id: product.id,
+        product_name: product.name,
+        type,
+        qty,
+        ref_type: refType,
+        ref_id: refId,
+        reason,
+        created_by: currentUser.id,
+        created_at: nowIso,
+      },
+    ];
   };
 
   // Settings
-  const updateSettings = (newSettings: Partial<Settings>) => {
-    setSettings(prev => {
-      const updated = { ...prev, ...newSettings };
-      logAudit('UPDATE_SETTINGS', 'settings', 'global', newSettings);
-      return updated;
-    });
-  };
+  const updateSettings = (newSettings: Partial<Settings>) =>
+    commitOps([
+      b => b.set(doc(db, 'settings', 'shop'), newSettings, { merge: true }),
+      auditOp('UPDATE_SETTINGS', 'settings', 'global', newSettings),
+    ]);
 
   // Categories
   const addCategory = (name: string) => {
-    const cat: Category = {
-      id: `cat-${Date.now()}`,
-      name: name.trim(),
-      active: true,
-    };
-    setCategories(prev => [...prev, cat]);
+    const ref = newRef('categories');
+    return commitOps([setOp(ref, { id: ref.id, name: name.trim(), active: true })]);
   };
 
   // Products
+  const productOps = (
+    prodInput: Omit<Product, 'id' | 'current_stock' | 'created_at' | 'updated_at'>,
+    opening_stock: number
+  ): Op[] => {
+    const ref = newRef('products');
+    const now = new Date().toISOString();
+    const product: Product = { ...prodInput, id: ref.id, current_stock: opening_stock, created_at: now, updated_at: now };
+    const ops: Op[] = [setOp(ref, product)];
+    if (opening_stock !== 0) {
+      ops.push(setOp(...movementRecord(product, 'opening', opening_stock, 'opening', undefined, 'Initial Opening Stock Count', now)));
+    }
+    ops.push(auditOp('CREATE_PRODUCT', 'product', ref.id, { name: product.name, opening_stock }));
+    return ops;
+  };
+
   const addProduct = (
     prodInput: Omit<Product, 'id' | 'current_stock' | 'created_at' | 'updated_at'>,
     opening_stock = 0
-  ) => {
-    const newId = `prod-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
-    const now = new Date().toISOString();
-    const product: Product = {
-      ...prodInput,
-      id: newId,
-      current_stock: opening_stock,
-      created_at: now,
-      updated_at: now,
-    };
-
-    setProducts(prev => [...prev, product]);
-
-    if (opening_stock !== 0) {
-      const movement: StockMovement = {
-        id: `sm-${Date.now()}`,
-        product_id: newId,
-        product_name: product.name,
-        type: 'opening',
-        qty: opening_stock,
-        ref_type: 'opening',
-        reason: 'Initial Opening Stock Count',
-        created_by: currentUser.id,
-        created_at: now,
-      };
-      setStockMovements(prev => [movement, ...prev]);
-    }
-
-    logAudit('CREATE_PRODUCT', 'product', newId, { name: product.name, opening_stock });
-  };
+  ) => commitOps(productOps(prodInput, opening_stock));
 
   const updateProduct = (id: string, updates: Partial<Product>) => {
-    setProducts(prev =>
-      prev.map(p => {
-        if (p.id === id) {
-          const old = { ...p };
-          const updated = { ...p, ...updates, updated_at: new Date().toISOString() };
-          // Audit price changes specifically as required by Section 1 & Section 4
-          if (updates.selling_price !== undefined && updates.selling_price !== old.selling_price) {
-            logAudit('PRICE_CHANGE', 'product', id, {
-              product_name: p.name,
-              old_price: old.selling_price,
-              new_price: updates.selling_price,
-            });
-          }
-          return updated;
-        }
-        return p;
-      })
-    );
+    const old = products.find(p => p.id === id);
+    const ops: Op[] = [updateOp(doc(db, 'products', id), toUpdate({ ...updates, updated_at: new Date().toISOString() }))];
+    // Audit price changes specifically as required by Section 1 & Section 4
+    if (old && updates.selling_price !== undefined && updates.selling_price !== old.selling_price) {
+      ops.push(
+        auditOp('PRICE_CHANGE', 'product', id, {
+          product_name: old.name,
+          old_price: old.selling_price,
+          new_price: updates.selling_price,
+        })
+      );
+    }
+    return commitOps(ops);
   };
 
   const toggleProductActive = (id: string) => {
-    setProducts(prev =>
-      prev.map(p => (p.id === id ? { ...p, active: !p.active } : p))
-    );
+    const p = products.find(x => x.id === id);
+    if (!p) return Promise.resolve({ success: false, error: 'Product not found' });
+    return commitOps([updateOp(doc(db, 'products', id), { active: !p.active, updated_at: new Date().toISOString() })]);
   };
 
   // Suppliers
   const addSupplier = (supplierInput: Omit<Supplier, 'id' | 'active'>) => {
-    const newId = `sup-${Date.now()}`;
-    const supplier: Supplier = {
-      ...supplierInput,
-      id: newId,
-      active: true,
-    };
-    setSuppliers(prev => [...prev, supplier]);
-    logAudit('CREATE_SUPPLIER', 'supplier', newId, { name: supplier.name });
+    const ref = newRef('suppliers');
+    return commitOps([
+      setOp(ref, { ...supplierInput, id: ref.id, active: true }),
+      auditOp('CREATE_SUPPLIER', 'supplier', ref.id, { name: supplierInput.name }),
+    ]);
   };
 
-  const updateSupplier = (id: string, updates: Partial<Supplier>) => {
-    setSuppliers(prev =>
-      prev.map(s => (s.id === id ? { ...s, ...updates } : s))
-    );
-  };
+  const updateSupplier = (id: string, updates: Partial<Supplier>) =>
+    commitOps([updateOp(doc(db, 'suppliers', id), toUpdate(updates))]);
 
   // Customers
-  const addCustomer = (
-    custInput: Omit<Customer, 'id' | 'active' | 'current_dues'>,
-    opening_due = 0
-  ): Customer => {
-    const newId = `cust-${Date.now()}`;
-    const customer: Customer = {
-      ...custInput,
-      id: newId,
-      active: true,
-      current_dues: opening_due,
-    };
-    setCustomers(prev => [...prev, customer]);
-
+  const customerOps = (custInput: Omit<Customer, 'id' | 'active' | 'current_dues'>, opening_due: number): [Customer, Op[]] => {
+    const ref = newRef('customers');
+    const customer: Customer = { ...custInput, id: ref.id, active: true, current_dues: opening_due };
+    const ops: Op[] = [setOp(ref, customer)];
     if (opening_due > 0) {
+      const lref = newRef('customer_ledger');
       const ledgerEntry: CustomerLedgerEntry = {
-        id: `cl-${Date.now()}`,
-        customer_id: newId,
+        id: lref.id,
+        customer_id: ref.id,
         type: 'opening',
         amount: opening_due,
         balance_after: opening_due,
@@ -366,40 +493,34 @@ export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         created_by: currentUser.id,
         created_at: new Date().toISOString(),
       };
-      setCustomerLedger(prev => [...prev, ledgerEntry]);
+      ops.push(setOp(lref, ledgerEntry));
     }
-
-    logAudit('CREATE_CUSTOMER', 'customer', newId, { name: customer.name, opening_due });
-    return customer;
+    ops.push(auditOp('CREATE_CUSTOMER', 'customer', ref.id, { name: customer.name, opening_due }));
+    return [customer, ops];
   };
 
-  const updateCustomer = (id: string, updates: Partial<Customer>) => {
-    setCustomers(prev =>
-      prev.map(c => (c.id === id ? { ...c, ...updates } : c))
-    );
+  const addCustomer = async (custInput: Omit<Customer, 'id' | 'active' | 'current_dues'>, opening_due = 0) => {
+    const [customer, ops] = customerOps(custInput, opening_due);
+    const res = await commitOps(ops);
+    return res.success ? { ...res, customer } : res;
   };
 
-  // Next invoice generator: e.g. DP-2026-000104
-  const getNextInvoiceNo = (): string => {
-    const year = currentBusinessDate.split('-')[0] || '2026';
-    const prefix = settings.invoice_prefix || 'DP';
-    // Count existing sales
-    const count = sales.length + 104; // start friendly sequence
-    const padded = String(count).padStart(6, '0');
-    return `${prefix}-${year}-${padded}`;
-  };
+  const updateCustomer = (id: string, updates: Partial<Customer>) =>
+    commitOps([updateOp(doc(db, 'customers', id), toUpdate(updates))]);
 
   // Create Sale - Business Rules 1, 2, 3, 4, 8, 10
-  const createSale = (input: NewSaleInput): { success: boolean; sale?: Sale; error?: string } => {
+  // Runs as one Firestore transaction: fresh stock is read and re-checked, so two counters
+  // can't sell the last packet twice (replaces SELECT … FOR UPDATE from the plan).
+  const createSale = async (input: NewSaleInput): Promise<Result & { sale?: Sale }> => {
     const businessDate = input.custom_business_date || currentBusinessDate;
+    const closedDayError = `Cannot create sale: Day ${businessDate} has already been closed and locked! Contact Owner to re-open.`;
 
     // Rule 8: After daily closing, cashiers can't create or back-date entries for that date
     if (currentUser.role === 'cashier' && isDateClosed(businessDate)) {
-      return {
-        success: false,
-        error: `Cannot create sale: Day ${businessDate} has already been closed and locked! Contact Owner to re-open.`,
-      };
+      return { success: false, error: closedDayError };
     }
+
+    if (input.items.length === 0) return { success: false, error: 'Cart is empty.' };
 
     // Cashier discount limit check
     if (currentUser.role === 'cashier' && input.discount > 0) {
@@ -413,171 +534,193 @@ export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
 
-    // Rule 10: Credit sale requires customer and credit limit check
-    let customer: Customer | undefined;
-    if (input.payment_method === 'credit') {
-      if (!input.customer_id) {
-        return {
-          success: false,
-          error: 'Credit sale (Udhaar) requires selecting a registered customer.',
-        };
-      }
-      customer = customers.find(c => c.id === input.customer_id);
-      if (!customer) {
-        return { success: false, error: 'Selected credit customer does not exist.' };
-      }
+    // Rule 10: Credit sale requires customer
+    if (input.payment_method === 'credit' && !input.customer_id) {
+      return { success: false, error: 'Credit sale (Udhaar) requires selecting a registered customer.' };
     }
 
-    // Rule 4: Insufficient stock check for all items upfront (row-locking simulation)
-    for (const item of input.items) {
-      const product = products.find(p => p.id === item.product_id);
-      if (!product) return { success: false, error: `Product not found: ${item.product_id}` };
-      if (!settings.allow_negative_stock && product.current_stock < item.qty) {
-        return {
-          success: false,
-          error: `Insufficient stock for ${product.name}. Current stock: ${product.current_stock} ${product.unit}, requested: ${item.qty} ${product.unit}`,
-        };
-      }
-    }
+    if (!navigator.onLine) return { success: false, error: OFFLINE_SALE_ERROR };
 
-    // Calculate totals
-    let subtotal = 0;
-    let taxTotal = 0;
-    const saleId = `sale-${Date.now()}`;
-    const invoiceNo = getNextInvoiceNo();
+    const qtyByProduct = new Map<string, number>();
+    input.items.forEach(item => qtyByProduct.set(item.product_id, (qtyByProduct.get(item.product_id) || 0) + item.qty));
 
-    const saleItems = input.items.map((item, idx) => {
-      const product = products.find(p => p.id === item.product_id)!;
-      const lineSubtotal = Number((item.qty * item.unit_price).toFixed(2));
-      const lineDiscount = item.discount || 0;
-      const taxable = Math.max(0, lineSubtotal - lineDiscount);
-      const taxRate = settings.gst_enabled ? (product.gst_percent || 0) : 0;
-      const lineTax = Number(((taxable * taxRate) / 100).toFixed(2));
-      const lineTotal = Number((taxable + lineTax).toFixed(2));
+    const prefix = settings.invoice_prefix || 'DP';
+    const year = businessDate.split('-')[0];
+    const counterRef = doc(db, 'counters', `invoice-${prefix}-${year}`);
+    const saleRef = newRef('sales');
+    const saleId = saleRef.id;
 
-      subtotal += lineSubtotal;
-      taxTotal += lineTax;
+    try {
+      const saleRecord = await runTransaction(db, async tx => {
+        // All reads first (Firestore transaction rule)
+        const productSnaps = await Promise.all([...qtyByProduct.keys()].map(id => tx.get(doc(db, 'products', id))));
+        const closingSnap = await tx.get(doc(db, 'daily_closings', businessDate));
+        const counterSnap = await tx.get(counterRef);
+        const customerSnap =
+          input.payment_method === 'credit' ? await tx.get(doc(db, 'customers', input.customer_id!)) : null;
 
-      return {
-        id: `si-${saleId}-${idx + 1}`,
-        sale_id: saleId,
-        product_id: product.id,
-        product_name: product.name,
-        qty: item.qty,
-        unit: product.unit,
-        unit_price: item.unit_price,
-        discount: lineDiscount,
-        tax: lineTax,
-        line_total: lineTotal,
-      };
-    });
-
-    const overallDiscount = input.discount || 0;
-    const finalTotal = Math.max(0, Number((subtotal - overallDiscount + taxTotal).toFixed(2)));
-
-    // Rule 10: Check credit limit
-    if (customer && customer.credit_limit !== null && customer.credit_limit !== undefined) {
-      const newDues = customer.current_dues + finalTotal;
-      if (newDues > customer.credit_limit) {
-        return {
-          success: false,
-          error: `Credit sale would exceed ${customer.name}'s credit limit of ₹${customer.credit_limit}. Current dues: ₹${customer.current_dues}, Bill total: ₹${finalTotal} (Projected dues: ₹${newDues}).`,
-        };
-      }
-    }
-
-    const saleRecord: Sale = {
-      id: saleId,
-      invoice_no: invoiceNo,
-      business_date: businessDate,
-      customer_id: customer ? customer.id : null,
-      customer_name: customer ? customer.name : 'Retail Customer',
-      customer_mobile: customer?.mobile,
-      subtotal,
-      discount: overallDiscount,
-      tax: taxTotal,
-      total: finalTotal,
-      payment_method: input.payment_method,
-      status: 'completed',
-      is_offline_entry: Boolean(input.is_offline_entry),
-      offline_bill_ref: input.offline_bill_ref,
-      items: saleItems,
-      created_by: currentUser.id,
-      created_by_name: currentUser.name,
-      created_at: new Date().toISOString(),
-    };
-
-    // Rule 3: Atomic commit: Update stock, append movements, update ledger
-    const nowIso = new Date().toISOString();
-    const newMovements: StockMovement[] = saleItems.map(item => ({
-      id: `sm-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      product_id: item.product_id,
-      product_name: item.product_name,
-      type: 'sale',
-      qty: -item.qty,
-      ref_type: 'sale',
-      ref_id: saleId,
-      reason: `Sale ${invoiceNo}`,
-      created_by: currentUser.id,
-      created_at: nowIso,
-    }));
-
-    // Update products cache
-    setProducts(prev =>
-      prev.map(p => {
-        const matchingItem = saleItems.find(si => si.product_id === p.id);
-        if (matchingItem) {
-          return {
-            ...p,
-            current_stock: Number((p.current_stock - matchingItem.qty).toFixed(3)),
-            updated_at: nowIso,
-          };
+        if (currentUser.role === 'cashier' && closingSnap.exists() && closingSnap.data().status === 'closed') {
+          throw new BusinessError(closedDayError);
         }
-        return p;
-      })
-    );
 
-    setStockMovements(prev => [...newMovements, ...prev]);
-    setSales(prev => [saleRecord, ...prev]);
+        const fresh = new Map<string, Product>();
+        productSnaps.forEach(s => {
+          if (!s.exists()) throw new BusinessError(`Product not found: ${s.id}`);
+          fresh.set(s.id, { ...s.data(), id: s.id } as Product);
+        });
 
-    // Credit ledger update
-    if (customer) {
-      const newDues = Number((customer.current_dues + finalTotal).toFixed(2));
-      const ledgerEntry: CustomerLedgerEntry = {
-        id: `cl-${Date.now()}`,
-        customer_id: customer.id,
-        type: 'credit_sale',
-        amount: finalTotal,
-        balance_after: newDues,
-        sale_id: saleId,
-        invoice_no: invoiceNo,
-        note: `Credit sale invoice ${invoiceNo}`,
-        created_by: currentUser.id,
-        created_at: nowIso,
-      };
-      setCustomerLedger(prev => [...prev, ledgerEntry]);
-      setCustomers(prev =>
-        prev.map(c => (c.id === customer!.id ? { ...c, current_dues: newDues } : c))
-      );
+        // Rule 4: Insufficient stock check against the latest stock
+        qtyByProduct.forEach((qty, pid) => {
+          const product = fresh.get(pid)!;
+          if (!settings.allow_negative_stock && product.current_stock < qty) {
+            throw new BusinessError(
+              `Insufficient stock for ${product.name}. Current stock: ${product.current_stock} ${product.unit}, requested: ${qty} ${product.unit}`
+            );
+          }
+        });
+
+        let customer: Customer | undefined;
+        if (customerSnap) {
+          if (!customerSnap.exists()) throw new BusinessError('Selected credit customer does not exist.');
+          customer = { ...customerSnap.data(), id: customerSnap.id } as Customer;
+        }
+
+        // Calculate totals
+        let subtotal = 0;
+        let taxTotal = 0;
+        const last = counterSnap.exists() ? Number(counterSnap.data().last) || 0 : 0;
+        const invoiceNo = `${prefix}-${year}-${String(last + 1).padStart(6, '0')}`;
+
+        const saleItems = input.items.map((item, idx) => {
+          const product = fresh.get(item.product_id)!;
+          const lineSubtotal = r2(item.qty * item.unit_price);
+          const lineDiscount = item.discount || 0;
+          const taxable = Math.max(0, lineSubtotal - lineDiscount);
+          const taxRate = settings.gst_enabled ? product.gst_percent || 0 : 0;
+          const lineTax = r2((taxable * taxRate) / 100);
+          const lineTotal = r2(taxable + lineTax);
+
+          subtotal += lineSubtotal;
+          taxTotal += lineTax;
+
+          return {
+            id: `si-${saleId}-${idx + 1}`,
+            sale_id: saleId,
+            product_id: product.id,
+            product_name: product.name,
+            qty: item.qty,
+            unit: product.unit,
+            unit_price: item.unit_price,
+            discount: lineDiscount,
+            tax: lineTax,
+            line_total: lineTotal,
+          };
+        });
+
+        const overallDiscount = input.discount || 0;
+        const finalTotal = Math.max(0, r2(subtotal - overallDiscount + taxTotal));
+
+        // Rule 10: Check credit limit
+        if (customer && customer.credit_limit !== null && customer.credit_limit !== undefined) {
+          const projected = customer.current_dues + finalTotal;
+          if (projected > customer.credit_limit) {
+            throw new BusinessError(
+              `Credit sale would exceed ${customer.name}'s credit limit of ₹${customer.credit_limit}. Current dues: ₹${customer.current_dues}, Bill total: ₹${finalTotal} (Projected dues: ₹${projected}).`
+            );
+          }
+        }
+
+        const nowIso = new Date().toISOString();
+        const sale: Sale = {
+          id: saleId,
+          invoice_no: invoiceNo,
+          business_date: businessDate,
+          customer_id: customer ? customer.id : null,
+          customer_name: customer ? customer.name : 'Retail Customer',
+          customer_mobile: customer?.mobile,
+          subtotal: r2(subtotal),
+          discount: overallDiscount,
+          tax: r2(taxTotal),
+          total: finalTotal,
+          payment_method: input.payment_method,
+          status: 'completed',
+          is_offline_entry: Boolean(input.is_offline_entry),
+          offline_bill_ref: input.offline_bill_ref,
+          items: saleItems,
+          created_by: currentUser.id,
+          created_by_name: currentUser.name,
+          created_at: nowIso,
+        };
+
+        // Rule 3: sale + items + stock movements + ledger entry commit together
+        tx.set(counterRef, { last: last + 1 });
+        tx.set(saleRef, sale);
+        qtyByProduct.forEach((qty, pid) => {
+          tx.update(doc(db, 'products', pid), {
+            current_stock: r3(fresh.get(pid)!.current_stock - qty),
+            updated_at: nowIso,
+          });
+        });
+        saleItems.forEach(item => {
+          tx.set(
+            ...movementRecord(
+              { id: item.product_id, name: item.product_name },
+              'sale',
+              -item.qty,
+              'sale',
+              saleId,
+              `Sale ${invoiceNo}`,
+              nowIso
+            )
+          );
+        });
+
+        if (customer) {
+          const newDues = r2(customer.current_dues + finalTotal);
+          const lref = newRef('customer_ledger');
+          const ledgerEntry: CustomerLedgerEntry = {
+            id: lref.id,
+            customer_id: customer.id,
+            type: 'credit_sale',
+            amount: finalTotal,
+            balance_after: newDues,
+            sale_id: saleId,
+            invoice_no: invoiceNo,
+            note: `Credit sale invoice ${invoiceNo}`,
+            created_by: currentUser.id,
+            created_at: nowIso,
+          };
+          tx.set(lref, ledgerEntry);
+          tx.update(doc(db, 'customers', customer.id), { current_dues: newDues });
+        }
+
+        tx.set(
+          ...auditEntry('CREATE_SALE', 'sale', saleId, {
+            invoice_no: invoiceNo,
+            total: finalTotal,
+            payment_method: input.payment_method,
+            items_count: saleItems.length,
+          })
+        );
+
+        return sale;
+      });
+
+      return { success: true, sale: saleRecord };
+    } catch (err) {
+      if (err instanceof BusinessError) return { success: false, error: err.message };
+      console.error(err);
+      return { success: false, error: friendlyFirebaseError(err) };
     }
-
-    logAudit('CREATE_SALE', 'sale', saleId, {
-      invoice_no: invoiceNo,
-      total: finalTotal,
-      payment_method: input.payment_method,
-      items_count: saleItems.length,
-    });
-
-    return { success: true, sale: saleRecord };
   };
 
   // Cancel Sale - Rule 1 & Rule 8:
   // "Completed sales are never deleted, only cancelled; cancellation writes reverse stock movements and, for credit sales, a reverse ledger entry."
   // Cashier: same open day only; owner: any day, audited.
-  const cancelSale = (saleId: string, reason: string): { success: boolean; error?: string } => {
-    const sale = sales.find(s => s.id === saleId);
-    if (!sale) return { success: false, error: 'Sale not found.' };
-    if (sale.status === 'cancelled') return { success: false, error: 'Sale is already cancelled.' };
+  const cancelSale = async (saleId: string, reason: string): Promise<Result> => {
+    const localSale = sales.find(s => s.id === saleId);
+    if (!localSale) return { success: false, error: 'Sale not found.' };
+    if (localSale.status === 'cancelled') return { success: false, error: 'Sale is already cancelled.' };
 
     if (!reason || reason.trim().length === 0) {
       return { success: false, error: 'A cancellation reason is mandatory.' };
@@ -585,119 +728,113 @@ export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     // Role check: cashier can only cancel on the same day if day is still open
     if (currentUser.role === 'cashier') {
-      if (sale.business_date !== currentBusinessDate) {
+      if (localSale.business_date !== currentBusinessDate) {
         return {
           success: false,
           error: 'Cashier permission denied: Cashiers can only cancel sales created today. Past dates require Owner.',
         };
       }
-      if (isDateClosed(sale.business_date)) {
-        return {
-          success: false,
-          error: 'Cashier permission denied: Cannot cancel sale from a closed day.',
-        };
+      if (isDateClosed(localSale.business_date)) {
+        return { success: false, error: 'Cashier permission denied: Cannot cancel sale from a closed day.' };
       }
     }
 
-    const nowIso = new Date().toISOString();
+    if (!navigator.onLine) return { success: false, error: 'No internet connection. Cancel the bill once the connection is back.' };
 
-    // 1. Reverse stock movements
-    const reverseMovements: StockMovement[] = sale.items.map(item => ({
-      id: `sm-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      product_id: item.product_id,
-      product_name: item.product_name,
-      type: 'sale_cancel',
-      qty: item.qty, // Positive reverse
-      ref_type: 'sale',
-      ref_id: sale.id,
-      reason: `Cancellation of ${sale.invoice_no}: ${reason}`,
-      created_by: currentUser.id,
-      created_at: nowIso,
-    }));
+    try {
+      await runTransaction(db, async tx => {
+        const saleSnap = await tx.get(doc(db, 'sales', saleId));
+        if (!saleSnap.exists()) throw new BusinessError('Sale not found.');
+        const sale = { ...saleSnap.data(), id: saleSnap.id } as Sale;
+        if (sale.status === 'cancelled') throw new BusinessError('Sale is already cancelled.');
 
-    // Update stock cache
-    setProducts(prev =>
-      prev.map(p => {
-        const item = sale.items.find(si => si.product_id === p.id);
-        if (item) {
-          return {
-            ...p,
-            current_stock: Number((p.current_stock + item.qty).toFixed(3)),
-            updated_at: nowIso,
+        const customerSnap =
+          sale.payment_method === 'credit' && sale.customer_id ? await tx.get(doc(db, 'customers', sale.customer_id)) : null;
+
+        const nowIso = new Date().toISOString();
+
+        // 1. Reverse stock movements
+        sale.items.forEach(item => {
+          tx.set(
+            ...movementRecord(
+              { id: item.product_id, name: item.product_name },
+              'sale_cancel',
+              item.qty,
+              'sale',
+              sale.id,
+              `Cancellation of ${sale.invoice_no}: ${reason}`,
+              nowIso
+            )
+          );
+          tx.update(doc(db, 'products', item.product_id), { current_stock: increment(item.qty), updated_at: nowIso });
+        });
+
+        // 2. Reverse customer credit ledger if credit sale
+        if (customerSnap?.exists()) {
+          const dues = Number(customerSnap.data().current_dues) || 0;
+          const newDues = Math.max(0, r2(dues - sale.total));
+          const lref = newRef('customer_ledger');
+          const ledgerEntry: CustomerLedgerEntry = {
+            id: lref.id,
+            customer_id: customerSnap.id,
+            type: 'adjustment',
+            amount: -sale.total,
+            balance_after: newDues,
+            sale_id: sale.id,
+            invoice_no: sale.invoice_no,
+            note: `Reversal of cancelled credit invoice ${sale.invoice_no}: ${reason}`,
+            created_by: currentUser.id,
+            created_at: nowIso,
           };
+          tx.set(lref, ledgerEntry);
+          tx.update(customerSnap.ref, { current_dues: newDues });
         }
-        return p;
-      })
-    );
 
-    setStockMovements(prev => [...reverseMovements, ...prev]);
+        // 3. Update sale status
+        tx.update(saleSnap.ref, {
+          status: 'cancelled',
+          cancel_reason: reason,
+          cancelled_by: currentUser.name,
+          cancelled_at: nowIso,
+        });
 
-    // 2. Reverse customer credit ledger if credit sale
-    if (sale.payment_method === 'credit' && sale.customer_id) {
-      const customer = customers.find(c => c.id === sale.customer_id);
-      if (customer) {
-        const newDues = Math.max(0, Number((customer.current_dues - sale.total).toFixed(2)));
-        const ledgerEntry: CustomerLedgerEntry = {
-          id: `cl-${Date.now()}`,
-          customer_id: customer.id,
-          type: 'adjustment',
-          amount: -sale.total,
-          balance_after: newDues,
-          sale_id: sale.id,
-          invoice_no: sale.invoice_no,
-          note: `Reversal of cancelled credit invoice ${sale.invoice_no}: ${reason}`,
-          created_by: currentUser.id,
-          created_at: nowIso,
-        };
-        setCustomerLedger(prev => [...prev, ledgerEntry]);
-        setCustomers(prev =>
-          prev.map(c => (c.id === customer.id ? { ...c, current_dues: newDues } : c))
+        // 4. Audit log
+        tx.set(
+          ...auditEntry('CANCEL_SALE', 'sale', sale.id, {
+            invoice_no: sale.invoice_no,
+            amount: sale.total,
+            reason,
+            cancelled_by: currentUser.name,
+            role: currentUser.role,
+          })
         );
-      }
+      });
+      return { success: true };
+    } catch (err) {
+      if (err instanceof BusinessError) return { success: false, error: err.message };
+      console.error(err);
+      return { success: false, error: friendlyFirebaseError(err) };
     }
-
-    // 3. Update sale status
-    setSales(prev =>
-      prev.map(s =>
-        s.id === saleId
-          ? {
-              ...s,
-              status: 'cancelled',
-              cancel_reason: reason,
-              cancelled_by: currentUser.name,
-              cancelled_at: nowIso,
-            }
-          : s
-      )
-    );
-
-    // 4. Audit log
-    logAudit('CANCEL_SALE', 'sale', sale.id, {
-      invoice_no: sale.invoice_no,
-      amount: sale.total,
-      reason,
-      cancelled_by: currentUser.name,
-      role: currentUser.role,
-    });
-
-    return { success: true };
   };
 
-  // Purchases - Rule 5: Purchase + purchase items + stock increase are one transaction
-  const createPurchase = (input: NewPurchaseInput): { success: boolean; error?: string } => {
+  // Purchases - Rule 5: Purchase + purchase items + stock increase are one atomic batch
+  const createPurchase = (input: NewPurchaseInput): Promise<Result> => {
     const supplier = suppliers.find(s => s.id === input.supplier_id);
-    if (!supplier) return { success: false, error: 'Supplier not found' };
+    if (!supplier) return Promise.resolve({ success: false, error: 'Supplier not found' });
     if (!input.items || input.items.length === 0) {
-      return { success: false, error: 'Please add at least one purchase item line.' };
+      return Promise.resolve({ success: false, error: 'Please add at least one purchase item line.' });
     }
+    const missing = input.items.find(line => !products.some(p => p.id === line.product_id));
+    if (missing) return Promise.resolve({ success: false, error: `Product not found: ${missing.product_id}` });
 
-    const purchaseId = `pur-${Date.now()}`;
+    const purchaseRef = newRef('purchases');
+    const purchaseId = purchaseRef.id;
     let grandTotal = 0;
     const nowIso = new Date().toISOString();
 
     const purchaseItems = input.items.map((line, idx) => {
       const prod = products.find(p => p.id === line.product_id)!;
-      const lineTotal = Number((line.qty * line.unit_cost).toFixed(2));
+      const lineTotal = r2(line.qty * line.unit_cost);
       grandTotal += lineTotal;
       return {
         id: `pi-${purchaseId}-${idx + 1}`,
@@ -717,90 +854,106 @@ export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       supplier_name: supplier.name,
       supplier_invoice_no: input.supplier_invoice_no || `INV-${Date.now().toString().slice(-4)}`,
       purchase_date: input.purchase_date,
-      total: grandTotal,
+      total: r2(grandTotal),
       notes: input.notes,
       items: purchaseItems,
       created_by: currentUser.id,
       created_at: nowIso,
     };
 
-    // Stock movements
-    const movements: StockMovement[] = purchaseItems.map(pi => ({
-      id: `sm-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      product_id: pi.product_id,
-      product_name: pi.product_name,
-      type: 'purchase',
-      qty: pi.qty,
-      ref_type: 'purchase',
-      ref_id: purchaseId,
-      reason: `Supplier Invoice: ${input.supplier_invoice_no}`,
-      created_by: currentUser.id,
-      created_at: nowIso,
-    }));
+    const ops: Op[] = [setOp(purchaseRef, purchaseRecord)];
 
-    // Update stock and optionally update purchase price
-    setProducts(prev =>
-      prev.map(p => {
-        const item = purchaseItems.find(pi => pi.product_id === p.id);
-        if (item) {
-          return {
-            ...p,
-            current_stock: Number((p.current_stock + item.qty).toFixed(3)),
-            purchase_price: input.update_product_cost ? item.unit_cost : p.purchase_price,
-            updated_at: nowIso,
-          };
-        }
-        return p;
+    // Stock movements
+    purchaseItems.forEach(pi => {
+      ops.push(
+        setOp(
+          ...movementRecord(
+            { id: pi.product_id, name: pi.product_name },
+            'purchase',
+            pi.qty,
+            'purchase',
+            purchaseId,
+            `Supplier Invoice: ${input.supplier_invoice_no}`,
+            nowIso
+          )
+        )
+      );
+    });
+
+    // Update stock (increment works offline and with concurrent sales) and optionally purchase price
+    const perProduct = new Map<string, { qty: number; unit_cost: number }>();
+    purchaseItems.forEach(pi => {
+      const prev = perProduct.get(pi.product_id);
+      perProduct.set(pi.product_id, { qty: (prev?.qty || 0) + pi.qty, unit_cost: pi.unit_cost });
+    });
+    perProduct.forEach(({ qty, unit_cost }, pid) => {
+      ops.push(
+        updateOp(doc(db, 'products', pid), {
+          current_stock: increment(qty),
+          updated_at: nowIso,
+          ...(input.update_product_cost ? { purchase_price: unit_cost } : {}),
+        })
+      );
+    });
+
+    ops.push(
+      auditOp('CREATE_PURCHASE', 'purchase', purchaseId, {
+        supplier: supplier.name,
+        invoice_no: input.supplier_invoice_no,
+        total: r2(grandTotal),
+        items_count: purchaseItems.length,
       })
     );
 
-    setStockMovements(prev => [...movements, ...prev]);
-    setPurchases(prev => [purchaseRecord, ...prev]);
-
-    logAudit('CREATE_PURCHASE', 'purchase', purchaseId, {
-      supplier: supplier.name,
-      invoice_no: input.supplier_invoice_no,
-      total: grandTotal,
-      items_count: purchaseItems.length,
-    });
-
-    return { success: true };
+    return commitOps(ops);
   };
 
   // Stock Adjustment - Rule 7: Every adjustment needs a reason and is written to the audit log (Owner only)
-  const adjustStock = (
+  const adjustStock = async (
     productId: string,
     type: 'damage' | 'expired' | 'adjustment',
     qtyChange: number,
     reason: string
-  ): { success: boolean; error?: string } => {
+  ): Promise<Result> => {
     if (currentUser.role !== 'owner') {
       return { success: false, error: 'Only shop Owner is authorized to adjust stock.' };
     }
     if (!reason || reason.trim().length === 0) {
       return { success: false, error: 'Mandatory reason required for stock adjustment.' };
     }
+    if (!navigator.onLine) return { success: false, error: 'No internet connection. Try the adjustment again once online.' };
 
-    const res = addStockMovement(
-      productId,
-      type,
-      qtyChange,
-      'adjustment',
-      undefined,
-      reason
-    );
+    try {
+      await runTransaction(db, async tx => {
+        const snap = await tx.get(doc(db, 'products', productId));
+        if (!snap.exists()) throw new BusinessError('Product not found');
+        const product = { ...snap.data(), id: snap.id } as Product;
 
-    if (res.success) {
-      const prod = products.find(p => p.id === productId);
-      logAudit('STOCK_ADJUSTMENT', 'stock', productId, {
-        product_name: prod?.name,
-        type,
-        qty_change: qtyChange,
-        reason,
+        const newStock = r3(product.current_stock + qtyChange);
+        if (!settings.allow_negative_stock && newStock < 0) {
+          throw new BusinessError(
+            `Insufficient stock for ${product.name}. Available: ${product.current_stock} ${product.unit}, requested deduction: ${Math.abs(qtyChange)} ${product.unit}`
+          );
+        }
+
+        const nowIso = new Date().toISOString();
+        tx.set(...movementRecord(product, type, qtyChange, 'adjustment', undefined, reason, nowIso));
+        tx.update(snap.ref, { current_stock: newStock, updated_at: nowIso });
+        tx.set(
+          ...auditEntry('STOCK_ADJUSTMENT', 'stock', productId, {
+            product_name: product.name,
+            type,
+            qty_change: qtyChange,
+            reason,
+          })
+        );
       });
+      return { success: true };
+    } catch (err) {
+      if (err instanceof BusinessError) return { success: false, error: err.message };
+      console.error(err);
+      return { success: false, error: friendlyFirebaseError(err) };
     }
-
-    return res;
   };
 
   // Customer Credit Payment
@@ -809,14 +962,15 @@ export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     amount: number,
     paymentMethod: 'cash' | 'upi',
     note?: string
-  ): { success: boolean; error?: string } => {
-    if (amount <= 0) return { success: false, error: 'Payment amount must be greater than zero.' };
+  ): Promise<Result> => {
+    if (amount <= 0) return Promise.resolve({ success: false, error: 'Payment amount must be greater than zero.' });
     const customer = customers.find(c => c.id === customerId);
-    if (!customer) return { success: false, error: 'Customer not found.' };
+    if (!customer) return Promise.resolve({ success: false, error: 'Customer not found.' });
 
-    const newDues = Number((customer.current_dues - amount).toFixed(2));
+    const newDues = r2(customer.current_dues - amount);
+    const lref = newRef('customer_ledger');
     const entry: CustomerLedgerEntry = {
-      id: `cl-${Date.now()}`,
+      id: lref.id,
       customer_id: customer.id,
       type: 'payment',
       amount: -amount,
@@ -827,65 +981,62 @@ export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       created_at: new Date().toISOString(),
     };
 
-    setCustomerLedger(prev => [...prev, entry]);
-    setCustomers(prev =>
-      prev.map(c => (c.id === customer.id ? { ...c, current_dues: newDues } : c))
-    );
-
-    logAudit('RECEIVE_CREDIT_PAYMENT', 'customer_ledger', customer.id, {
-      customer_name: customer.name,
-      amount,
-      payment_method: paymentMethod,
-      new_dues: newDues,
-    });
-
-    return { success: true };
+    return commitOps([
+      setOp(lref, entry),
+      updateOp(doc(db, 'customers', customer.id), { current_dues: increment(-amount) }),
+      auditOp('RECEIVE_CREDIT_PAYMENT', 'customer_ledger', customer.id, {
+        customer_name: customer.name,
+        amount,
+        payment_method: paymentMethod,
+        new_dues: newDues,
+      }),
+    ]);
   };
 
   // Expenses
   const addExpense = (
     expenseInput: Omit<Expense, 'id' | 'created_by' | 'created_by_name' | 'created_at'>
-  ): { success: boolean; error?: string } => {
+  ): Promise<Result> => {
     // Check if date is closed
     if (currentUser.role === 'cashier' && isDateClosed(expenseInput.expense_date)) {
-      return { success: false, error: 'Cannot add expense for a closed day.' };
+      return Promise.resolve({ success: false, error: 'Cannot add expense for a closed day.' });
     }
 
-    const newId = `exp-${Date.now()}`;
+    const ref = newRef('expenses');
     const exp: Expense = {
       ...expenseInput,
-      id: newId,
+      id: ref.id,
       created_by: currentUser.id,
       created_by_name: currentUser.name,
       created_at: new Date().toISOString(),
     };
-    setExpenses(prev => [exp, ...prev]);
-    logAudit('ADD_EXPENSE', 'expense', newId, {
-      category: exp.category,
-      amount: exp.amount,
-      date: exp.expense_date,
-    });
-    return { success: true };
+    return commitOps([
+      setOp(ref, exp),
+      auditOp('ADD_EXPENSE', 'expense', ref.id, {
+        category: exp.category,
+        amount: exp.amount,
+        date: exp.expense_date,
+      }),
+    ]);
   };
 
-  const updateExpense = (id: string, updates: Partial<Expense>): { success: boolean; error?: string } => {
+  const updateExpense = (id: string, updates: Partial<Expense>): Promise<Result> => {
     const exp = expenses.find(e => e.id === id);
-    if (!exp) return { success: false, error: 'Expense not found' };
+    if (!exp) return Promise.resolve({ success: false, error: 'Expense not found' });
     if (currentUser.role === 'cashier' && exp.expense_date !== currentBusinessDate) {
-      return { success: false, error: 'Cashier can only edit same-day expenses.' };
+      return Promise.resolve({ success: false, error: 'Cashier can only edit same-day expenses.' });
     }
-    setExpenses(prev => prev.map(e => (e.id === id ? { ...e, ...updates } : e)));
-    logAudit('UPDATE_EXPENSE', 'expense', id, updates);
-    return { success: true };
+    return commitOps([
+      updateOp(doc(db, 'expenses', id), toUpdate(updates)),
+      auditOp('UPDATE_EXPENSE', 'expense', id, updates),
+    ]);
   };
 
-  const deleteExpense = (id: string): { success: boolean; error?: string } => {
+  const deleteExpense = (id: string): Promise<Result> => {
     if (currentUser.role !== 'owner') {
-      return { success: false, error: 'Only Owner can delete an expense record.' };
+      return Promise.resolve({ success: false, error: 'Only Owner can delete an expense record.' });
     }
-    setExpenses(prev => prev.filter(e => e.id !== id));
-    logAudit('DELETE_EXPENSE', 'expense', id, {});
-    return { success: true };
+    return commitOps([b => b.delete(doc(db, 'expenses', id)), auditOp('DELETE_EXPENSE', 'expense', id, {})]);
   };
 
   // Daily Closing Calculation - Formula from page 5:
@@ -948,13 +1099,14 @@ export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     openingCash: number,
     actualCash: number,
     note?: string
-  ): { success: boolean; error?: string } => {
+  ): Promise<Result> => {
     const summary = getDailyCashSummary(date);
-    const expected = Number((openingCash + summary.cash_sales + summary.cash_from_dues - summary.cash_expenses).toFixed(2));
-    const diff = Number((actualCash - expected).toFixed(2));
+    const expected = r2(openingCash + summary.cash_sales + summary.cash_from_dues - summary.cash_expenses);
+    const diff = r2(actualCash - expected);
 
+    // Document id is the business date, so there is only ever one closing per day
     const closingRecord: DailyClosing = {
-      id: `close-${date}`,
+      id: date,
       business_date: date,
       opening_cash: openingCash,
       cash_sales: summary.cash_sales,
@@ -973,52 +1125,40 @@ export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       closed_at: new Date().toISOString(),
     };
 
-    setDailyClosings(prev => {
-      const filtered = prev.filter(c => c.business_date !== date);
-      return [closingRecord, ...filtered];
-    });
-
-    logAudit('DAY_CLOSED', 'daily_closing', closingRecord.id, {
-      business_date: date,
-      expected_cash: expected,
-      actual_cash: actualCash,
-      difference: diff,
-    });
-
-    return { success: true };
+    return commitOps([
+      setOp(doc(db, 'daily_closings', date), closingRecord),
+      auditOp('DAY_CLOSED', 'daily_closing', date, {
+        business_date: date,
+        expected_cash: expected,
+        actual_cash: actualCash,
+        difference: diff,
+      }),
+    ]);
   };
 
   // Rule 8: Owner re-open is audited
-  const reopenDailyClosing = (date: string, reason: string): { success: boolean; error?: string } => {
+  const reopenDailyClosing = (date: string, reason: string): Promise<Result> => {
     if (currentUser.role !== 'owner') {
-      return { success: false, error: 'Only the Owner can re-open a closed business day.' };
+      return Promise.resolve({ success: false, error: 'Only the Owner can re-open a closed business day.' });
     }
     if (!reason || reason.trim().length === 0) {
-      return { success: false, error: 'A mandatory reason is required to re-open a closed day.' };
+      return Promise.resolve({ success: false, error: 'A mandatory reason is required to re-open a closed day.' });
     }
 
-    setDailyClosings(prev =>
-      prev.map(c =>
-        c.business_date === date
-          ? {
-              ...c,
-              status: 'open',
-              reopened_by: currentUser.id,
-              reopened_by_name: currentUser.name,
-              reopened_at: new Date().toISOString(),
-              reopen_reason: reason,
-            }
-          : c
-      )
-    );
-
-    logAudit('DAY_REOPENED', 'daily_closing', `close-${date}`, {
-      business_date: date,
-      reason,
-      reopened_by: currentUser.name,
-    });
-
-    return { success: true };
+    return commitOps([
+      updateOp(doc(db, 'daily_closings', date), {
+        status: 'open',
+        reopened_by: currentUser.id,
+        reopened_by_name: currentUser.name,
+        reopened_at: new Date().toISOString(),
+        reopen_reason: reason,
+      }),
+      auditOp('DAY_REOPENED', 'daily_closing', date, {
+        business_date: date,
+        reason,
+        reopened_by: currentUser.name,
+      }),
+    ]);
   };
 
   // Expiry Alerts calculation: matches remaining stock with newest purchases (FIFO assumption)
@@ -1079,19 +1219,20 @@ export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const expiryAlerts = calculateExpiryAlerts();
 
   // CSV Import for Products + Opening Stock (Week 1, #8)
-  const importProductsCSV = (csvText: string): { success: boolean; count: number; error?: string } => {
+  const importProductsCSV = async (csvText: string): Promise<Result & { count: number }> => {
     try {
       const lines = csvText.trim().split('\n');
       if (lines.length <= 1) return { success: false, count: 0, error: 'CSV file is empty or only has headers' };
 
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      const ops: Op[] = [];
+      const knownCategories = [...categories];
       let imported = 0;
 
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
         const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-        
+
         // name, category, unit, purchase_price, selling_price, min_stock, track_expiry, opening_stock
         const name = cols[0] || `Product ${i}`;
         const categoryName = cols[1] || 'Fresh Milk';
@@ -1102,45 +1243,50 @@ export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const track_expiry = (cols[6] || 'yes').toLowerCase() === 'yes';
         const opening_stock = parseFloat(cols[7]) || 0;
 
-        let category = categories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
+        let category = knownCategories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
         if (!category) {
-          const newCat: Category = { id: `cat-${Date.now()}-${i}`, name: categoryName, active: true };
-          category = newCat;
-          setCategories(prev => [...prev, newCat]);
+          const cref = newRef('categories');
+          category = { id: cref.id, name: categoryName, active: true };
+          knownCategories.push(category);
+          ops.push(setOp(cref, category));
         }
 
-        const sku = `SKU-${name.slice(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}`;
-        addProduct(
-          {
-            category_id: category.id,
-            name,
-            sku,
-            unit,
-            purchase_price,
-            selling_price,
-            gst_percent: 0,
-            min_stock,
-            track_expiry,
-            active: true,
-          },
-          opening_stock
+        const sku = `SKU-${name.slice(0, 3).toUpperCase()}-${Date.now().toString().slice(-4)}${i}`;
+        ops.push(
+          ...productOps(
+            {
+              category_id: category.id,
+              name,
+              sku,
+              unit,
+              purchase_price,
+              selling_price,
+              gst_percent: 0,
+              min_stock,
+              track_expiry,
+              active: true,
+            },
+            opening_stock
+          )
         );
         imported++;
       }
 
-      logAudit('IMPORT_PRODUCTS_CSV', 'products', 'batch', { count: imported });
-      return { success: true, count: imported };
+      ops.push(auditOp('IMPORT_PRODUCTS_CSV', 'products', 'batch', { count: imported }));
+      const res = await commitOps(ops);
+      return { ...res, count: res.success ? imported : 0 };
     } catch (err: any) {
       return { success: false, count: 0, error: err.message || 'Failed to parse CSV' };
     }
   };
 
   // CSV Import for Customer Opening Dues (Week 1, #8)
-  const importCustomerDuesCSV = (csvText: string): { success: boolean; count: number; error?: string } => {
+  const importCustomerDuesCSV = async (csvText: string): Promise<Result & { count: number }> => {
     try {
       const lines = csvText.trim().split('\n');
       if (lines.length <= 1) return { success: false, count: 0, error: 'CSV file is empty or only has headers' };
 
+      const ops: Op[] = [];
       let imported = 0;
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
@@ -1154,45 +1300,91 @@ export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const opening_due = cols[4] ? parseFloat(cols[4]) : 0;
 
         if (name) {
-          addCustomer({ name, mobile, address, credit_limit }, opening_due);
+          ops.push(...customerOps({ name, mobile, address, credit_limit }, opening_due)[1]);
           imported++;
         }
       }
 
-      logAudit('IMPORT_CUSTOMERS_CSV', 'customers', 'batch', { count: imported });
-      return { success: true, count: imported };
+      ops.push(auditOp('IMPORT_CUSTOMERS_CSV', 'customers', 'batch', { count: imported }));
+      const res = await commitOps(ops);
+      return { ...res, count: res.success ? imported : 0 };
     } catch (err: any) {
       return { success: false, count: 0, error: err.message || 'Failed to parse CSV' };
     }
   };
 
-  // Reset to initial demo data
-  const resetToDemoData = () => {
-    setSettings(initialSettings);
-    setUsers(initialUsers);
-    setCurrentUser(initialUsers[0]);
-    setCategories(initialCategories);
-    setProducts(initialProducts);
-    setSuppliers(initialSuppliers);
-    setCustomers(initialCustomers);
-    setSales(initialSales);
-    setPurchases(initialPurchases);
-    setStockMovements(initialStockMovements);
-    setCustomerLedger(initialCustomerLedger);
-    setExpenses(initialExpenses);
-    setDailyClosings(initialDailyClosings);
-    setAuditLogs(initialAuditLogs);
-    setCurrentBusinessDate('2026-10-02');
-    localStorage.clear();
+  // Writes whole collections with their existing ids (demo seed + backup restore)
+  const restoreOps = (data: {
+    categories?: Category[];
+    products?: Product[];
+    suppliers?: Supplier[];
+    customers?: Customer[];
+    sales?: Sale[];
+    purchases?: Purchase[];
+    stockMovements?: StockMovement[];
+    customerLedger?: CustomerLedgerEntry[];
+    expenses?: Expense[];
+    dailyClosings?: DailyClosing[];
+    auditLogs?: AuditLog[];
+  }): Op[] => {
+    const ops: Op[] = [];
+    const add = <T extends { id: string }>(col: string, rows: T[] | undefined, idOf: (r: T) => string = r => r.id) =>
+      (rows || []).forEach(r => ops.push(setOp(doc(db, col, idOf(r)), { ...r, id: idOf(r) })));
+    add('categories', data.categories);
+    add('products', data.products);
+    add('suppliers', data.suppliers);
+    add('customers', data.customers);
+    add('sales', data.sales);
+    add('purchases', data.purchases);
+    add('stock_movements', data.stockMovements);
+    add('customer_ledger', data.customerLedger);
+    add('expenses', data.expenses);
+    add('daily_closings', data.dailyClosings, c => c.business_date);
+    add('audit_logs', data.auditLogs);
+
+    // Keep invoice numbers moving forward past the restored ones (never reused)
+    const lastByCounter = new Map<string, number>();
+    (data.sales || []).forEach(s => {
+      const m = s.invoice_no.match(/^(.*)-(\d{4})-(\d+)$/);
+      if (!m) return;
+      const key = `invoice-${m[1]}-${m[2]}`;
+      lastByCounter.set(key, Math.max(lastByCounter.get(key) || 0, Number(m[3])));
+    });
+    lastByCounter.forEach((last, key) => ops.push(b => b.set(doc(db, 'counters', key), { last })));
+    return ops;
   };
 
-  // Backup JSON
+  // Demo seed: only into an empty shop, so real data is never overwritten
+  const loadDemoData = async (): Promise<Result> => {
+    if (!isOwner) return { success: false, error: 'Only the Owner can load demo data.' };
+    if (products.length > 0) return { success: false, error: 'Demo data can only be loaded into an empty shop (no products yet).' };
+    if (!navigator.onLine) return { success: false, error: 'No internet connection.' };
+    return commitOps([
+      ...restoreOps({
+        categories: initialCategories,
+        products: initialProducts,
+        suppliers: initialSuppliers,
+        customers: initialCustomers,
+        sales: initialSales,
+        purchases: initialPurchases,
+        stockMovements: initialStockMovements,
+        customerLedger: initialCustomerLedger,
+        expenses: initialExpenses,
+        dailyClosings: initialDailyClosings,
+        auditLogs: initialAuditLogs,
+      }),
+      auditOp('LOAD_DEMO_DATA', 'system', 'root', {}),
+    ]);
+  };
+
+  // Backup JSON (covers the loaded history window for sales, movements and audit logs)
   const exportDatabaseJSON = (): string => {
     const backup = {
       version: '1.0',
       exported_at: new Date().toISOString(),
+      history_days: HISTORY_DAYS,
       settings,
-      users,
+      users: users.map(({ pin, ...u }) => u),
       categories,
       products,
       suppliers,
@@ -1208,61 +1400,85 @@ export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return JSON.stringify(backup, null, 2);
   };
 
-  // Restore JSON (Week 5: "Backup script + off-server copy; do a full restore on a fresh database")
-  const importDatabaseJSON = (jsonString: string): { success: boolean; error?: string } => {
+  // Restore JSON (Week 5: "do a full restore on a fresh database"). Staff logins are not restored.
+  const importDatabaseJSON = async (jsonString: string): Promise<Result> => {
+    if (!isOwner) return { success: false, error: 'Only the Owner can restore a backup.' };
+    if (!navigator.onLine) return { success: false, error: 'No internet connection.' };
     try {
       const data = JSON.parse(jsonString);
-      if (data.settings) setSettings(data.settings);
-      if (data.users) setUsers(data.users);
-      if (data.categories) setCategories(data.categories);
-      if (data.products) setProducts(data.products);
-      if (data.suppliers) setSuppliers(data.suppliers);
-      if (data.customers) setCustomers(data.customers);
-      if (data.sales) setSales(data.sales);
-      if (data.purchases) setPurchases(data.purchases);
-      if (data.stockMovements) setStockMovements(data.stockMovements);
-      if (data.customerLedger) setCustomerLedger(data.customerLedger);
-      if (data.expenses) setExpenses(data.expenses);
-      if (data.dailyClosings) setDailyClosings(data.dailyClosings);
-      if (data.auditLogs) setAuditLogs(data.auditLogs);
-
-      logAudit('RESTORE_DATABASE', 'system', 'root', { version: data.version });
-      return { success: true };
+      const ops = restoreOps(data);
+      if (data.settings) ops.push(setOp(doc(db, 'settings', 'shop'), data.settings));
+      ops.push(auditOp('RESTORE_DATABASE', 'system', 'root', { version: data.version }));
+      return commitOps(ops);
     } catch (err: any) {
       return { success: false, error: err.message || 'Invalid JSON format' };
     }
   };
 
-  // User management
-  const addUser = (name: string, mobile: string, pin: string, role: 'owner' | 'cashier') => {
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      name: name.trim(),
-      mobile: mobile.trim(),
-      pin: pin.trim(),
-      role,
-      active: true,
-      created_at: new Date().toISOString(),
-    };
-    setUsers(prev => [...prev, newUser]);
-    logAudit('CREATE_USER', 'user', newUser.id, { name: newUser.name, role: newUser.role });
+  // User management: each staff member gets a Firebase Auth login (mobile + PIN)
+  const addUser = async (name: string, mobile: string, pin: string, role: 'owner' | 'cashier'): Promise<Result> => {
+    if (!isOwner) return { success: false, error: 'Only the Owner can add users.' };
+    if (pin.length < MIN_PIN_LENGTH) return { success: false, error: `PIN must be at least ${MIN_PIN_LENGTH} digits.` };
+    if (!navigator.onLine) return { success: false, error: 'No internet connection.' };
+    try {
+      const uid = await createAuthUser(mobile, pin);
+      const newUser: User = {
+        id: uid,
+        name: name.trim(),
+        mobile: mobile.trim(),
+        role,
+        active: true,
+        created_at: new Date().toISOString(),
+      };
+      return commitOps([
+        setOp(doc(db, 'users', uid), newUser),
+        auditOp('CREATE_USER', 'user', uid, { name: newUser.name, role: newUser.role }),
+      ]);
+    } catch (err) {
+      return { success: false, error: friendlyFirebaseError(err) };
+    }
   };
 
-  const updateUserPin = (userId: string, newPin: string) => {
-    setUsers(prev => prev.map(u => (u.id === userId ? { ...u, pin: newPin } : u)));
-    logAudit('UPDATE_USER_PIN', 'user', userId, {});
+  const changeOwnPin = async (currentPin: string, newPin: string): Promise<Result> => {
+    if (newPin.length < MIN_PIN_LENGTH) return { success: false, error: `PIN must be at least ${MIN_PIN_LENGTH} digits.` };
+    const fbUser = auth.currentUser;
+    if (!fbUser) return { success: false, error: 'Not signed in.' };
+    try {
+      await reauthenticateWithCredential(fbUser, EmailAuthProvider.credential(mobileToEmail(currentUser.mobile), currentPin));
+      await updatePassword(fbUser, newPin);
+      await commitOps([auditOp('UPDATE_USER_PIN', 'user', currentUser.id, {})]);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: friendlyFirebaseError(err) };
+    }
   };
 
-  const toggleUserActive = (userId: string) => {
-    setUsers(prev => prev.map(u => (u.id === userId ? { ...u, active: !u.active } : u)));
-    logAudit('TOGGLE_USER_ACTIVE', 'user', userId, {});
+  const toggleUserActive = (userId: string): Promise<Result> => {
+    if (userId === currentUser.id) return Promise.resolve({ success: false, error: 'You cannot deactivate your own account.' });
+    const u = users.find(x => x.id === userId);
+    if (!u) return Promise.resolve({ success: false, error: 'User not found.' });
+    return commitOps([
+      updateOp(doc(db, 'users', userId), { active: !u.active }),
+      auditOp('TOGGLE_USER_ACTIVE', 'user', userId, { name: u.name, active: !u.active }),
+    ]);
   };
+
+  const signOutUser = () => signOut(auth);
+
+  if (!settingsDoc || !usersLoaded || !productsLoaded || !categoriesLoaded || !customersLoaded || !salesLoaded) {
+    return (
+      <FullScreenMessage>
+        <p className="font-semibold text-slate-900">Loading shop data…</p>
+      </FullScreenMessage>
+    );
+  }
 
   return (
     <DairyContext.Provider
       value={{
         currentUser,
-        setCurrentUser,
+        signOutUser,
+        historyDays: HISTORY_DAYS,
         users,
         settings,
         updateSettings,
@@ -1302,11 +1518,11 @@ export const DairyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         expiryAlerts,
         importProductsCSV,
         importCustomerDuesCSV,
-        resetToDemoData,
+        loadDemoData,
         exportDatabaseJSON,
         importDatabaseJSON,
         addUser,
-        updateUserPin,
+        changeOwnPin,
         toggleUserActive,
       }}
     >

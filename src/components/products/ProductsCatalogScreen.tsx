@@ -91,7 +91,7 @@ export const ProductsCatalogScreen: React.FC = () => {
     setShowModal(true);
   };
 
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -105,8 +105,8 @@ export const ProductsCatalogScreen: React.FC = () => {
       return;
     }
 
-    if (editingProd) {
-      updateProduct(editingProd.id, {
+    const res = editingProd
+      ? await updateProduct(editingProd.id, {
         name: name.trim(),
         category_id: categoryId,
         sku: sku.trim(),
@@ -117,9 +117,8 @@ export const ProductsCatalogScreen: React.FC = () => {
         gst_percent: gstPercent,
         min_stock: minStock,
         track_expiry: trackExpiry,
-      });
-    } else {
-      addProduct(
+      })
+      : await addProduct(
         {
           name: name.trim(),
           category_id: categoryId,
@@ -135,12 +134,15 @@ export const ProductsCatalogScreen: React.FC = () => {
         },
         openingStock
       );
+    if (!res.success) {
+      setFormError(res.error || 'Failed to save product');
+      return;
     }
 
     setShowModal(false);
   };
 
-  const handleRunCSVImport = () => {
+  const handleRunCSVImport = async () => {
     setImportResult(null);
     if (!csvText.trim()) {
       setImportResult({ success: false, msg: 'Please enter or paste CSV content.' });
@@ -148,7 +150,7 @@ export const ProductsCatalogScreen: React.FC = () => {
     }
 
     if (csvType === 'products') {
-      const res = importProductsCSV(csvText);
+      const res = await importProductsCSV(csvText);
       if (res.success) {
         setImportResult({ success: true, msg: `Successfully imported ${res.count} products with opening stock!` });
         setCsvText('');
@@ -156,7 +158,7 @@ export const ProductsCatalogScreen: React.FC = () => {
         setImportResult({ success: false, msg: res.error || 'Failed to import products CSV' });
       }
     } else {
-      const res = importCustomerDuesCSV(csvText);
+      const res = await importCustomerDuesCSV(csvText);
       if (res.success) {
         setImportResult({ success: true, msg: `Successfully imported ${res.count} customer accounts and opening dues!` });
         setCsvText('');

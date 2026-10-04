@@ -19,7 +19,9 @@ export const SettingsScreen: React.FC = () => {
     currentUser,
     exportDatabaseJSON,
     importDatabaseJSON,
-    resetToDemoData,
+    loadDemoData,
+    products,
+    historyDays,
   } = useDairy();
 
   const [shopName, setShopName] = useState(settings.shop_name);
@@ -36,9 +38,9 @@ export const SettingsScreen: React.FC = () => {
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [backupRestoreMsg, setBackupRestoreMsg] = useState<{ success: boolean; msg: string } | null>(null);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateSettings({
+    const res = await updateSettings({
       shop_name: shopName.trim(),
       address: address.trim(),
       phone: phone.trim(),
@@ -50,6 +52,10 @@ export const SettingsScreen: React.FC = () => {
       cashier_max_discount_percent: cashierMaxDiscount,
       allow_negative_stock: allowNegativeStock,
     });
+    if (!res.success) {
+      alert(res.error || 'Failed to save settings');
+      return;
+    }
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
   };
@@ -72,12 +78,12 @@ export const SettingsScreen: React.FC = () => {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = event => {
+    reader.onload = async event => {
       const text = event.target?.result as string;
-      const res = importDatabaseJSON(text);
+      setBackupRestoreMsg({ success: true, msg: 'Restoring backup to Firebase…' });
+      const res = await importDatabaseJSON(text);
       if (res.success) {
-        setBackupRestoreMsg({ success: true, msg: 'Full database successfully restored! Reloading state...' });
-        setTimeout(() => window.location.reload(), 1200);
+        setBackupRestoreMsg({ success: true, msg: 'Backup restored to Firebase. All devices update automatically.' });
       } else {
         setBackupRestoreMsg({ success: false, msg: res.error || 'Failed to restore JSON backup.' });
       }
@@ -85,10 +91,10 @@ export const SettingsScreen: React.FC = () => {
     reader.readAsText(file);
   };
 
-  const handleResetData = () => {
-    if (confirm('Warning: This will reset all products, sales, purchases, and udhaar balances to initial demo seed data. Continue?')) {
-      resetToDemoData();
-      alert('System reset to clean starter data.');
+  const handleLoadDemoData = async () => {
+    if (confirm('Load sample dairy products, customers and bills into this shop? Use this only on a test Firebase project.')) {
+      const res = await loadDemoData();
+      setBackupRestoreMsg({ success: res.success, msg: res.success ? 'Demo data loaded.' : res.error || 'Failed to load demo data.' });
     }
   };
 
@@ -308,7 +314,7 @@ export const SettingsScreen: React.FC = () => {
             <div>
               <h5 className="font-bold text-slate-900">1. Download Backup (JSON)</h5>
               <p className="text-slate-500 text-[11px] mt-1">
-                Creates an offline copy of all products, stock movements, bills, customer ledgers, and expenses.
+                Creates an offline copy of products, customer ledgers, purchases and expenses, plus the last {historyDays} days of bills, stock movements and audit logs.
               </p>
             </div>
             <button
@@ -326,7 +332,7 @@ export const SettingsScreen: React.FC = () => {
             <div>
               <h5 className="font-bold text-slate-900">2. Restore Database</h5>
               <p className="text-slate-500 text-[11px] mt-1">
-                Test disaster restore on a fresh device. Replaces current state with selected backup file.
+                Test disaster restore into a fresh Firebase project. Writes the backup's records to Firestore (staff logins must be re-added).
               </p>
             </div>
             <label className="w-full py-2 px-3 bg-white border border-slate-300 hover:bg-slate-100 font-semibold text-slate-800 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
@@ -336,21 +342,22 @@ export const SettingsScreen: React.FC = () => {
             </label>
           </div>
 
-          {/* Reset Demo Data */}
+          {/* Load Demo Data (empty shop only) */}
           <div className="p-4 bg-red-50/50 border border-red-200 rounded-xl space-y-2 flex flex-col justify-between">
             <div>
-              <h5 className="font-bold text-red-900">3. Reset Starter Data</h5>
+              <h5 className="font-bold text-red-900">3. Load Demo Data</h5>
               <p className="text-red-700 text-[11px] mt-1">
-                Clears custom testing changes and restores clean sample dairy stock and customers.
+                Fills an empty shop with sample dairy stock, customers and bills for testing. Only available before any product exists.
               </p>
             </div>
             <button
               type="button"
-              onClick={handleResetData}
-              className="w-full py-2 px-3 bg-white border border-red-300 text-red-700 hover:bg-red-50 font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+              onClick={handleLoadDemoData}
+              disabled={products.length > 0}
+              className="w-full py-2 px-3 bg-white border border-red-300 text-red-700 hover:bg-red-50 font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Reset to Starter State</span>
+              <span>{products.length > 0 ? 'Shop already has data' : 'Load Demo Data'}</span>
             </button>
           </div>
         </div>

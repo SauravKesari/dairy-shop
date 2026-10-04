@@ -49,11 +49,11 @@ export const SalesHistory: React.FC = () => {
     .filter(s => s.status === 'completed')
     .reduce((sum, s) => sum + s.total, 0);
 
-  const handleConfirmCancel = () => {
+  const handleConfirmCancel = async () => {
     if (!cancellingSale) return;
     setCancelError(null);
 
-    const res = cancelSale(cancellingSale.id, cancelReason);
+    const res = await cancelSale(cancellingSale.id, cancelReason);
     if (!res.success) {
       setCancelError(res.error || 'Failed to cancel sale');
       return;

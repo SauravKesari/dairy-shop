@@ -42,22 +42,22 @@ export const DailyClosingScreen: React.FC = () => {
   );
   const variance = Number((actualCashInput - calculatedExpected).toFixed(2));
 
-  const handleCloseDay = () => {
+  const handleCloseDay = async () => {
     setActionError(null);
-    const res = saveDailyClosing(selectedDate, openingFloatInput, actualCashInput, closingNote);
+    const res = await saveDailyClosing(selectedDate, openingFloatInput, actualCashInput, closingNote);
     if (!res.success) {
       setActionError(res.error || 'Failed to close day');
       return;
     }
   };
 
-  const handleConfirmReopen = () => {
+  const handleConfirmReopen = async () => {
     setActionError(null);
     if (!reopenReason.trim()) {
       setActionError('A mandatory reason is required to re-open a locked business day.');
       return;
     }
-    const res = reopenDailyClosing(selectedDate, reopenReason);
+    const res = await reopenDailyClosing(selectedDate, reopenReason);
     if (!res.success) {
       setActionError(res.error || 'Failed to re-open day');
       return;
