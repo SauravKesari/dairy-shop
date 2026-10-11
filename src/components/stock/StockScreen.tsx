@@ -70,7 +70,7 @@ export const StockScreen: React.FC = () => {
     });
   }, [expiryAlerts, expiryFilter]);
 
-  const handleConfirmAdjust = () => {
+  const handleConfirmAdjust = async () => {
     if (!adjustingProduct) return;
     setAdjustError(null);
 
@@ -80,7 +80,7 @@ export const StockScreen: React.FC = () => {
       signedQty = -Math.abs(adjustQty);
     }
 
-    const res = adjustStock(adjustingProduct.id, adjustType, signedQty, adjustReason);
+    const res = await adjustStock(adjustingProduct.id, adjustType, signedQty, adjustReason);
     if (!res.success) {
       setAdjustError(res.error || 'Failed to adjust stock');
       return;

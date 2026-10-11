@@ -16,6 +16,7 @@ import {
   User,
   Package,
   Rocket,
+  LogOut,
 } from 'lucide-react';
 
 export type NavTab =
@@ -42,8 +43,7 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
   const {
     currentUser,
-    setCurrentUser,
-    users,
+    signOutUser,
     settings,
     currentBusinessDate,
     setCurrentBusinessDate,
@@ -55,14 +55,6 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
   const [showRoleMenu, setShowRoleMenu] = useState(false);
 
   const isClosed = isDateClosed(currentBusinessDate);
-
-  const handleSwitchRole = (userId: string) => {
-    const target = users.find(u => u.id === userId);
-    if (target) {
-      setCurrentUser(target);
-      setShowRoleMenu(false);
-    }
-  };
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
@@ -303,7 +295,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             />
           </div>
 
-          {/* Quick Role Switcher Button */}
+          {/* Signed-in user menu */}
           <div className="relative">
             <button
               type="button"
@@ -323,26 +315,19 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                 onMouseLeave={() => setShowRoleMenu(false)}
               >
                 <div className="px-3 py-1 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                  Switch Active Role (Demo)
+                  Signed in as {currentUser.mobile}
                 </div>
-                {users.map(u => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => handleSwitchRole(u.id)}
-                    className={`w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center justify-between ${
-                      u.id === currentUser.id ? 'bg-slate-50 font-bold text-slate-900' : 'text-slate-700'
-                    }`}
-                  >
-                    <div>
-                      <span className="block">{u.name}</span>
-                      <span className="text-[10px] text-slate-400 capitalize">{u.role}</span>
-                    </div>
-                    {u.id === currentUser.id && (
-                      <span className="w-2 h-2 rounded-full bg-slate-900" />
-                    )}
-                  </button>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRoleMenu(false);
+                    signOutUser();
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
+                >
+                  <LogOut className="w-4 h-4 text-slate-500" />
+                  <span>Sign out</span>
+                </button>
               </div>
             )}
           </div>

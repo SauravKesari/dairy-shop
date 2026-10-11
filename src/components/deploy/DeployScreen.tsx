@@ -54,16 +54,20 @@ export const DeployScreen: React.FC = () => {
 
   const commands = [
     {
-      title: 'Step 1. Server Hardening & Docker Installation (Ubuntu 24.04)',
-      cmd: `sudo apt update && sudo apt upgrade -y\nsudo ufw allow 22 && sudo ufw allow 80 && sudo ufw allow 443 && sudo ufw enable\nsudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile\ncurl -fsSL https://get.docker.com | sudo sh`,
+      title: 'Step 1. Install the Firebase CLI and select your project',
+      cmd: `npm install -g firebase-tools\nfirebase login\nfirebase use --add`,
     },
     {
-      title: 'Step 2. Start Application with Docker Compose & Caddy Auto-HTTPS',
-      cmd: `export SHOP_DOMAIN="shop.yourdomain.in"\ndocker compose -f docker-compose.prod.yml up -d --build`,
+      title: 'Step 2. Deploy Firestore security rules (role checks for owner / cashier)',
+      cmd: `firebase deploy --only firestore:rules,firestore:indexes`,
     },
     {
-      title: 'Step 3. Configure Automated Daily Backup Cron to Offsite R2/B2',
-      cmd: `chmod +x deploy/backup.sh\n(crontab -l 2>/dev/null; echo "30 23 * * * /home/deploy/deploy/backup.sh >> /home/deploy/backup.log 2>&1") | crontab -`,
+      title: 'Step 3. Build and publish the app on Firebase Hosting (free HTTPS)',
+      cmd: `cp .env.example .env.local   # fill in VITE_FIREBASE_* values first\nnpm run build\nfirebase deploy --only hosting`,
+    },
+    {
+      title: 'Step 4. Daily backup: download the JSON backup from Settings, or schedule managed exports (Blaze plan)',
+      cmd: `gcloud firestore export gs://YOUR_BACKUP_BUCKET/$(date +%F)`,
     },
   ];
 
@@ -150,43 +154,42 @@ export const DeployScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* Option 2: Self-Hosted Low-Cost VPS Setup (Section 7) */}
+      {/* Option 2: Firebase (replaces the VPS + FastAPI + PostgreSQL setup) */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs space-y-4">
         <div className="border-b border-slate-200 pb-3 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Server className="w-4 h-4 text-slate-700" />
-              <span>Option 2: Low-Cost Self-Hosted VPS Deployment (₹0 – ₹500/month)</span>
+              <span>Option 2: Firebase Hosting + Firestore (₹0 on the free Spark plan)</span>
             </h3>
             <p className="text-xs text-slate-500">
-              Matches Section 7 of your Lean Plan with Docker Compose, automatic HTTPS via Caddy, and offsite backups
+              No server or backend APIs to run: data lives in Firestore, logins in Firebase Auth, and security rules enforce owner / cashier permissions
             </p>
           </div>
         </div>
 
-        {/* Server Comparison Table */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-            <span className="font-bold text-slate-900 block">Oracle Cloud Always Free</span>
-            <span className="text-emerald-700 font-extrabold text-sm block mt-0.5">₹0 / month</span>
+            <span className="font-bold text-slate-900 block">Firestore</span>
+            <span className="text-emerald-700 font-extrabold text-sm block mt-0.5">50k reads / 20k writes per day free</span>
             <p className="text-[11px] text-slate-500 mt-1">
-              Ampere ARM VM with 1-4 cores. Free indefinitely within usage limits.
+              Live sync across counter devices, offline cache when the internet drops.
             </p>
           </div>
 
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-            <span className="font-bold text-slate-900 block">Hetzner CX22</span>
-            <span className="text-slate-800 font-extrabold text-sm block mt-0.5">≈ ₹400 – ₹500 / month</span>
+            <span className="font-bold text-slate-900 block">Firebase Auth</span>
+            <span className="text-emerald-700 font-extrabold text-sm block mt-0.5">Free</span>
             <p className="text-[11px] text-slate-500 mt-1">
-              2 vCPU, 4 GB RAM. Ultra-reliable European or Singapore cloud server.
+              Mobile number + PIN login for owner and cashiers, with brute-force rate limiting.
             </p>
           </div>
 
           <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-            <span className="font-bold text-slate-900 block">DigitalOcean / Lightsail</span>
-            <span className="text-slate-800 font-extrabold text-sm block mt-0.5">≈ ₹500 – ₹800 / month</span>
+            <span className="font-bold text-slate-900 block">Firebase Hosting</span>
+            <span className="text-emerald-700 font-extrabold text-sm block mt-0.5">10 GB storage free</span>
             <p className="text-[11px] text-slate-500 mt-1">
-              Bangalore/Mumbai data centers for lowest latency from Indian broadband.
+              Automatic HTTPS and CDN; a custom domain can be added any time.
             </p>
           </div>
         </div>

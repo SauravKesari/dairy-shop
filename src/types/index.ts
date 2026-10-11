@@ -4,7 +4,7 @@ export interface User {
   id: string;
   name: string;
   mobile: string;
-  pin: string;
+  pin?: string; // Only in demo seed data; real PINs live in Firebase Auth, never in Firestore
   role: UserRole;
   active: boolean;
   created_at: string;

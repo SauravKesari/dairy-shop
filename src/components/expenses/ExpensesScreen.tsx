@@ -79,7 +79,7 @@ export const ExpensesScreen: React.FC = () => {
     setShowAddModal(true);
   };
 
-  const handleSaveExpense = (e: React.FormEvent) => {
+  const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -94,7 +94,7 @@ export const ExpensesScreen: React.FC = () => {
     }
 
     if (editingExpense) {
-      const res = updateExpense(editingExpense.id, {
+      const res = await updateExpense(editingExpense.id, {
         category: expCategory,
         amount: expAmount,
         expense_date: expDate,
@@ -106,7 +106,7 @@ export const ExpensesScreen: React.FC = () => {
         return;
       }
     } else {
-      const res = addExpense({
+      const res = await addExpense({
         category: expCategory,
         amount: expAmount,
         expense_date: expDate,
@@ -122,9 +122,9 @@ export const ExpensesScreen: React.FC = () => {
     setShowAddModal(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this expense record?')) {
-      const res = deleteExpense(id);
+      const res = await deleteExpense(id);
       if (!res.success) {
         alert(res.error);
       }

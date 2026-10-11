@@ -1,0 +1,177 @@
+rules_version = '2';
+
+// Server-side role checks (plan Section 5: "Role checks on the API, not only hidden buttons").
+// Owner: everything. Cashier: billing, cancel on an open day, customers/payments, purchases, expenses, day close.
+// Nothing is ever deleted except expenses by the owner (Rule 1).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function me() {
+      return get(userPath(request.auth.uid)).data;
+    }
+
+    function isActive() {
+      return signedIn() && exists(userPath(request.auth.uid)) && me().active == true;
+    }
+
+    function isOwner() {
+      return isActive() && me().role == 'owner';
+    }
+
+    // Rule 8: after daily closing, cashiers can't create, cancel or back-date entries for that date
+    function dayOpen(date) {
+      let path = /databases/$(database)/documents/daily_closings/$(date);
+      return !exists(path) || get(path).data.status == 'open';
+    }
+
+    function onlyChanges(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    // Lets a backup restore be re-run over records that already exist, without allowing edits
+    function unchanged() {
+      return request.resource.data == resource.data;
+    }
+
+    function createdByMe() {
+      return request.resource.data.created_by == request.auth.uid;
+    }
+
+    // First-time setup: the batch that creates meta/bootstrap may also create the owner and settings
+    function isBootstrapping() {
+      let bootstrap = /databases/$(database)/documents/meta/bootstrap;
+      return signedIn() && !exists(bootstrap) && getAfter(bootstrap).data.owner_uid == request.auth.uid;
+    }
+
+    match /meta/bootstrap {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.owner_uid == request.auth.uid
+        && getAfter(userPath(request.auth.uid)).data.role == 'owner';
+    }
+
+    match /users/{userId} {
+      allow read: if (signedIn() && request.auth.uid == userId) || isActive();
+      allow create: if isOwner()
+        || (isBootstrapping() && userId == request.auth.uid
+            && request.resource.data.role == 'owner' && request.resource.data.active == true);
+      allow update: if isOwner();
+    }
+
+    match /settings/{id} {
+      allow read: if isActive();
+      allow write: if isOwner() || isBootstrapping();
+    }
+
+    match /categories/{id} {
+      allow read: if isActive();
+      allow create, update: if isOwner();
+    }
+
+    match /products/{id} {
+      allow read: if isActive();
+      allow create: if isOwner();
+      // Non-owners only touch the stock cache (sales/purchases) and purchase price (purchase inward)
+      allow update: if isOwner()
+        || (isActive() && onlyChanges(['current_stock', 'updated_at', 'purchase_price']));
+    }
+
+    match /suppliers/{id} {
+      allow read: if isActive();
+      allow create: if isActive();
+      allow update: if isOwner();
+    }
+
+    match /customers/{id} {
+      allow read: if isActive();
+      allow create: if isActive();
+      allow update: if isOwner() || (isActive() && onlyChanges(['current_dues']));
+    }
+
+    match /sales/{id} {
+      allow read: if isActive();
+      allow create: if isOwner()
+        || (isActive() && createdByMe()
+            && request.resource.data.status == 'completed'
+            && dayOpen(request.resource.data.business_date));
+      // Rule 1: sales are never edited, only cancelled
+      allow update: if (isOwner() && unchanged())
+        || (isActive()
+            && resource.data.status == 'completed'
+            && request.resource.data.status == 'cancelled'
+            && onlyChanges(['status', 'cancel_reason', 'cancelled_by', 'cancelled_at'])
+            && (isOwner() || dayOpen(resource.data.business_date)));
+    }
+
+    match /purchases/{id} {
+      allow read: if isActive();
+      allow create: if isOwner() || (isActive() && createdByMe());
+      allow update: if isOwner() && unchanged();
+    }
+
+    // Rule 2/7: stock only changes through movements; adjustments (damage/expired/correction) are owner-only
+    match /stock_movements/{id} {
+      allow read: if isActive();
+      allow create: if isOwner()
+        || (isActive() && createdByMe()
+            && request.resource.data.type in ['sale', 'sale_cancel', 'purchase']);
+      allow update: if isOwner() && unchanged();
+    }
+
+    match /customer_ledger/{id} {
+      allow read: if isActive();
+      allow create: if isOwner() || (isActive() && createdByMe());
+      allow update: if isOwner() && unchanged();
+    }
+
+    match /expenses/{id} {
+      allow read: if isActive();
+      allow create: if isOwner()
+        || (isActive() && createdByMe() && dayOpen(request.resource.data.expense_date));
+      allow update: if isOwner()
+        || (isActive()
+            && resource.data.created_by == request.auth.uid
+            && request.resource.data.created_by == request.auth.uid
+            && dayOpen(resource.data.expense_date)
+            && dayOpen(request.resource.data.expense_date));
+      allow delete: if isOwner();
+    }
+
+    match /daily_closings/{date} {
+      allow read: if isActive();
+      allow create: if isOwner()
+        || (isActive()
+            && request.resource.data.business_date == date
+            && request.resource.data.status == 'closed'
+            && request.resource.data.closed_by == request.auth.uid);
+      // Only the owner can re-open a closed day (audited by the app)
+      allow update: if isOwner()
+        || (isActive()
+            && resource.data.status == 'open'
+            && request.resource.data.status == 'closed'
+            && request.resource.data.closed_by == request.auth.uid);
+    }
+
+    match /audit_logs/{id} {
+      allow read: if isOwner();
+      allow create: if isOwner() || (isActive() && request.resource.data.user_id == request.auth.uid);
+      allow update: if isOwner() && unchanged();
+    }
+
+    // Invoice sequence: only ever moves forward by one, so numbers are never reused
+    match /counters/{id} {
+      allow read: if isActive();
+      allow create: if isOwner() || (isActive() && request.resource.data.last == 1);
+      allow update: if (isOwner() && request.resource.data.last >= resource.data.last)
+        || (isActive() && request.resource.data.last == resource.data.last + 1);
+    }
+  }
+}

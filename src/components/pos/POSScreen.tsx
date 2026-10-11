@@ -166,8 +166,12 @@ export const POSScreen: React.FC = () => {
 
   const totalPayable = Math.max(0, Number((subtotal - discountAmount + taxAmount).toFixed(2)));
 
+  // Guards against a double tap creating two bills while the transaction is in flight
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+
   // Handle Checkout
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
+    if (isCheckingOut) return;
     setErrorBanner(null);
 
     if (cart.length === 0) {
@@ -187,7 +191,8 @@ export const POSScreen: React.FC = () => {
       return;
     }
 
-    const saleResult = createSale({
+    setIsCheckingOut(true);
+    const saleResult = await createSale({
       customer_id: selectedCustomerId || null,
       payment_method: paymentMethod,
       discount: discountAmount,
@@ -200,6 +205,8 @@ export const POSScreen: React.FC = () => {
         unit_price: item.unit_price,
       })),
     });
+
+    setIsCheckingOut(false);
 
     if (!saleResult.success) {
       setErrorBanner(saleResult.error || 'Failed to complete sale');
@@ -215,18 +222,22 @@ export const POSScreen: React.FC = () => {
   };
 
   // Create new customer directly from POS
-  const handleQuickAddCustomer = (e: React.FormEvent) => {
+  const handleQuickAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCustName.trim()) return;
 
     const limit = newCustLimit ? parseFloat(newCustLimit) : null;
-    const newCust = addCustomer({
+    const res = await addCustomer({
       name: newCustName.trim(),
       mobile: newCustMobile.trim() || '9800000000',
       credit_limit: limit,
     });
+    if (!res.success || !res.customer) {
+      setErrorBanner(res.error || 'Failed to add customer');
+      return;
+    }
 
-    setSelectedCustomerId(newCust.id);
+    setSelectedCustomerId(res.customer.id);
     setShowAddCustomerModal(false);
     setNewCustName('');
     setNewCustMobile('');
@@ -745,11 +756,11 @@ export const POSScreen: React.FC = () => {
 
               <button
                 type="button"
-                disabled={cart.length === 0 || (isDayClosed && currentUser.role === 'cashier')}
+                disabled={isCheckingOut || cart.length === 0 || (isDayClosed && currentUser.role === 'cashier')}
                 onClick={handleCheckout}
                 className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold rounded-lg transition-all shadow-md disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed"
               >
-                Complete Bill (Enter)
+                {isCheckingOut ? 'Saving…' : 'Complete Bill (Enter)'}
               </button>
             </div>
           </div>
