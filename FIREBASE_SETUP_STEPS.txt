@@ -24,8 +24,8 @@ but are not pushed yet, because this machine has no GitHub login.
      gh pr create --base main --head feat/firebase-storage --title "Replace localStorage with Firebase (Firestore + Auth)"
    (Or open https://github.com/SauravKesari/dairy-shop and click "Compare & pull request".)
 
-5. After merging: the repo uses bun.lock, so run "bun install" to update it
-   (or commit package-lock.json if you use npm instead).
+5. The project uses npm (package-lock.json). After pulling changes, run
+   "npm install --legacy-peer-deps".
 
 
 PART 2 - CREATE THE FIREBASE PROJECT (Firebase console)
