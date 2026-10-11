@@ -16,16 +16,29 @@
 
 /* Print CSS for Thermal 58mm/80mm and A4 receipts */
 @media print {
-  body * {
-    visibility: hidden;
+  /* Remove the app behind the receipt from the layout (not just hide it), so it can't add extra pages */
+  body:has(.receipt-print-root) > *:not(.receipt-print-root) {
+    display: none !important;
   }
-  #printable-receipt, #printable-receipt * {
-    visibility: visible;
+  /* Undo the modal's fixed position, 90vh cap and scrolling, so the receipt prints once, top-left */
+  body {
+    background: white !important;
+  }
+  .receipt-print-root,
+  .receipt-print-root > div,
+  .receipt-print-root > div > div:not(.no-print) {
+    display: block !important;
+    position: static !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    border: none !important;
   }
   #printable-receipt {
-    position: absolute;
-    left: 0;
-    top: 0;
     width: 100% !important;
     margin: 0 !important;
     padding: 8px !important;

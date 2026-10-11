@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import QRCode from 'qrcode';
 import { Sale } from '../../types';
 import { useDairy } from '../../context/DairyContext';
@@ -74,8 +75,9 @@ ${settings.receipt_footer}`;
     setTimeout(() => setCopied(false), 2000);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+  // Rendered directly under <body> so print CSS can drop the rest of the app (see index.css)
+  return createPortal(
+    <div className="receipt-print-root fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
       <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col my-8 max-h-[90vh]">
         {/* Modal Controls Header (no-print) */}
         <div className="no-print flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
@@ -315,6 +317,7 @@ ${settings.receipt_footer}`;
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
