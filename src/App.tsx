@@ -14,6 +14,7 @@ import { CreditScreen } from './components/credit/CreditScreen';
 import { ExpensesScreen } from './components/expenses/ExpensesScreen';
 import { DailyClosingScreen } from './components/closing/DailyClosingScreen';
 import { ReportsScreen } from './components/reports/ReportsScreen';
+import { ProfitScreen } from './components/profit/ProfitScreen';
 import { ProductsCatalogScreen } from './components/products/ProductsCatalogScreen';
 import { CategoriesUnitsScreen } from './components/products/CategoriesUnitsScreen';
 import { AuditLogScreen } from './components/audit/AuditLogScreen';
@@ -42,6 +43,7 @@ function AppContent() {
         {currentTab === 'expenses' && <ExpensesScreen />}
         {currentTab === 'closing' && <DailyClosingScreen />}
         {currentTab === 'reports' && can('view_reports') && <ReportsScreen />}
+        {currentTab === 'profit' && can('view_profit') && <ProfitScreen />}
         {currentTab === 'products' && <ProductsCatalogScreen />}
         {currentTab === 'catalog_setup' && <CategoriesUnitsScreen />}
         {currentTab === 'audit' && currentUser.role === 'owner' && <AuditLogScreen />}

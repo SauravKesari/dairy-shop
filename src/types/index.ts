@@ -11,7 +11,8 @@ export type CashierPermission =
   | 'manage_expenses'
   | 'record_purchases'
   | 'view_reports'
-  | 'daily_closing';
+  | 'daily_closing'
+  | 'view_profit';
 
 export type CashierPermissions = Partial<Record<CashierPermission, boolean>>;
 
@@ -100,6 +101,7 @@ export interface SaleItem {
   discount: number;
   tax: number;
   line_total: number;
+  unit_cost?: number; // Purchase price when sold; missing on bills made before profit tracking
 }
 
 export interface Sale {
@@ -121,6 +123,7 @@ export interface Sale {
   is_offline_entry: boolean;
   offline_bill_ref?: string;
   items: SaleItem[];
+  profit_tracked?: boolean; // Counted in daily_profit when created, so a cancel must subtract it
   created_by: string; // user id
   created_by_name: string;
   created_at: string;
@@ -256,4 +259,24 @@ export interface ExpiryAlertItem {
   status: 'expired' | 'today' | '3_days' | '7_days';
   purchase_invoice_no?: string;
   supplier_name?: string;
+}
+
+// Per-product totals inside a day's profit summary
+export interface ProductProfit {
+  name: string;
+  qty: number;
+  revenue: number; // Before GST, after discounts
+  cost: number;
+}
+
+// daily_profit/{YYYY-MM-DD}: kept up to date by every bill and cancellation, rebuilt by the owner
+export interface DailyProfit {
+  date: string;
+  bills: number;
+  revenue: number; // Before GST, after discounts
+  cost: number;
+  tax: number;
+  discount: number;
+  estimated_cost_bills: number; // Bills priced with today's purchase price because they had no unit_cost
+  products: Record<string, ProductProfit>;
 }

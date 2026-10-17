@@ -1,8 +1,11 @@
 import { CashierPermission, User } from '../types';
 
-// Same rule as firestore.rules can(): owner always, cashier unless explicitly turned off
+// Sensitive permissions a cashier only gets when the owner ticks them (firestore.rules uses the same list)
+export const DEFAULT_OFF: CashierPermission[] = ['view_profit'];
+
+// Same rule as firestore.rules can(): owner always; cashier per their permissions, missing key = the default
 export const can = (user: Pick<User, 'role' | 'permissions'>, permission: CashierPermission) =>
-  user.role === 'owner' || user.permissions?.[permission] !== false;
+  user.role === 'owner' || (user.permissions?.[permission] ?? !DEFAULT_OFF.includes(permission));
 
 export const PERMISSION_LABELS: { key: CashierPermission; label: string; hint: string }[] = [
   { key: 'give_credit', label: 'Give Udhaar bills', hint: 'Choose Udhaar as payment mode at POS' },
@@ -14,6 +17,7 @@ export const PERMISSION_LABELS: { key: CashierPermission; label: string; hint: s
   { key: 'record_purchases', label: 'Record purchases', hint: 'Stock inward from suppliers' },
   { key: 'view_reports', label: 'View reports', hint: 'Reports screen and CSV / PDF export' },
   { key: 'daily_closing', label: 'Close the day', hint: 'Daily cash closing' },
+  { key: 'view_profit', label: 'View profit', hint: 'Profit screen with cost prices (off unless you tick it)' },
 ];
 
 export const permissionDenied = (permission: CashierPermission) => {
