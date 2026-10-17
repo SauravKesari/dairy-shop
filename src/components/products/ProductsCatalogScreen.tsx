@@ -3,7 +3,7 @@ import { useDairy } from '../../context/DairyContext';
 import { Product, ProductUnit } from '../../types';
 import { Plus, Search, Upload, FileDown, Edit3, Power, Check, AlertCircle, Tags } from 'lucide-react';
 import { CategoriesUnitsScreen } from './CategoriesUnitsScreen';
-import { allUnits, unitLabel } from '../../lib/units';
+import { allUnits, unitLabel, isLooseUnit, qtyStep, parseQty } from '../../lib/units';
 
 export const ProductsCatalogScreen: React.FC = () => {
   const {
@@ -619,8 +619,11 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                   <label className="block text-slate-700 font-semibold mb-1">Min Stock Alert Level</label>
                   <input
                     type="number"
+                    step={qtyStep(unit)}
+                    min="0"
+                    inputMode={isLooseUnit(unit) ? 'decimal' : 'numeric'}
                     value={minStock}
-                    onChange={e => setMinStock(parseFloat(e.target.value) || 0)}
+                    onChange={e => setMinStock(parseQty(e.target.value, unit))}
                     className="w-full p-2 border border-slate-200 rounded-lg font-mono-numbers"
                   />
                 </div>
@@ -643,9 +646,11 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                   </label>
                   <input
                     type="number"
-                    step="0.001"
+                    step={qtyStep(unit)}
+                    min="0"
+                    inputMode={isLooseUnit(unit) ? 'decimal' : 'numeric'}
                     value={openingStock}
-                    onChange={e => setOpeningStock(parseFloat(e.target.value) || 0)}
+                    onChange={e => setOpeningStock(parseQty(e.target.value, unit))}
                     className="w-full p-2 border border-slate-200 rounded-lg font-mono-numbers"
                   />
                   <span className="text-[10px] text-slate-500">

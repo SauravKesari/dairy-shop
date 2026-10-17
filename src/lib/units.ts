@@ -19,3 +19,21 @@ export const allUnits = (settings: Pick<Settings, 'custom_units'>, extra?: strin
 };
 
 export const unitLabel = (unit: string) => DEFAULT_UNITS.find(u => u.unit === unit)?.label;
+
+// Loose milk / paneer is sold by weight or volume; every other unit is a countable pack (whole numbers only)
+export const isLooseUnit = (unit: string) => unit === 'L' || unit === 'kg';
+
+// For <input type="number">: browsers count spinner steps from `min`, so min must be a multiple of step
+export const qtyStep = (unit: string) => (isLooseUnit(unit) ? '0.001' : '1');
+
+// Reads a typed quantity: up to 3 decimals for loose L / kg, whole numbers for packs
+export const parseQty = (raw: string, unit: string) => {
+  const n = parseFloat(raw);
+  if (!Number.isFinite(n)) return 0;
+  return isLooseUnit(unit) ? Number(n.toFixed(3)) : Math.round(n);
+};
+
+export const isValidQtyForUnit = (qty: number, unit: string) => isLooseUnit(unit) || Number.isInteger(qty);
+
+export const wholeQtyError = (name: string, unit: string, qty: number) =>
+  `${name} is sold in whole ${unit}s; ${qty} is not allowed. Enter a whole number.`;
