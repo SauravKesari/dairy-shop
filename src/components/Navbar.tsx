@@ -18,6 +18,7 @@ import {
   Rocket,
   LogOut,
   Tags,
+  TrendingUp,
 } from 'lucide-react';
 import { SHOW_DEV_TOOLS } from '../lib/firebase';
 
@@ -30,6 +31,7 @@ export type NavTab =
   | 'expenses'
   | 'closing'
   | 'reports'
+  | 'profit'
   | 'products'
   | 'catalog_setup'
   | 'audit'
@@ -185,6 +187,21 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
           >
             <BarChart3 className="w-3.5 h-3.5" />
             <span>Reports</span>
+          </button>
+          )}
+
+          {can('view_profit') && (
+          <button
+            type="button"
+            onClick={() => onSelectTab('profit')}
+            className={`px-3 py-2 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+              currentTab === 'profit'
+                ? 'bg-slate-900 text-white'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span>Profit</span>
           </button>
           )}
 
@@ -424,6 +441,16 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
           }`}
         >
           Reports
+        </button>
+        )}
+        {can('view_profit') && (
+        <button
+          onClick={() => onSelectTab('profit')}
+          className={`px-2.5 py-1 rounded-md whitespace-nowrap ${
+            currentTab === 'profit' ? 'bg-slate-900 text-white' : 'text-slate-600'
+          }`}
+        >
+          Profit
         </button>
         )}
         <button

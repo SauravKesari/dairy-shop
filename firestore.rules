@@ -26,9 +26,10 @@ service cloud.firestore {
       return isActive() && me().role == 'owner';
     }
 
-    // Per-cashier permissions set by the owner; a missing key means allowed (matches src/lib/permissions.ts)
+    // Per-cashier permissions set by the owner; a missing key means allowed, except the sensitive
+    // ones listed here that need an explicit tick (matches DEFAULT_OFF in src/lib/permissions.ts)
     function can(p) {
-      return isOwner() || (isActive() && me().get('permissions', {}).get(p, true) != false);
+      return isOwner() || (isActive() && me().get('permissions', {}).get(p, !(p in ['view_profit'])) == true);
     }
 
     // Rule 8: after daily closing, cashiers can't create, cancel or back-date entries for that date
@@ -173,6 +174,12 @@ service cloud.firestore {
             && resource.data.status == 'open'
             && request.resource.data.status == 'closed'
             && request.resource.data.closed_by == request.auth.uid);
+    }
+
+    // Day profit summaries: every bill adds to its day, so any active user may write; reading needs view_profit
+    match /daily_profit/{date} {
+      allow read: if can('view_profit');
+      allow create, update: if isActive() && request.resource.data.date == date;
     }
 
     match /audit_logs/{id} {

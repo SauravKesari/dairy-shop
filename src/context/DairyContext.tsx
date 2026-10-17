@@ -12,6 +12,7 @@ import {
   arrayUnion,
   arrayRemove,
   deleteField,
+  getDocs,
   DocumentReference,
   DocumentData,
   Query,
@@ -42,6 +43,7 @@ import {
   CustomerLedgerEntry,
   Expense,
   DailyClosing,
+  DailyProfit,
   AuditLog,
   ExpiryAlertItem,
   PaymentMethod,
@@ -63,6 +65,7 @@ import {
 import { LoginScreen, AuthStatus } from '../components/auth/LoginScreen';
 import { can, permissionDenied } from '../lib/permissions';
 import { allUnits, isValidQtyForUnit, wholeQtyError } from '../lib/units';
+import { saleProfit, SaleProfit, emptyDay, addSaleToDay } from '../lib/profit';
 
 interface NewSaleItemInput {
   product_id: string;
@@ -167,6 +170,9 @@ interface DairyContextType {
   changeOwnPin: (currentPin: string, newPin: string) => Promise<Result>;
   toggleUserActive: (userId: string) => Promise<Result>;
   updateUserPermissions: (userId: string, permissions: CashierPermissions) => Promise<Result>;
+  // Profit (daily_profit summaries)
+  fetchDailyProfit: (from: string, to: string) => Promise<DailyProfit[]>;
+  rebuildDailyProfit: (from: string, to: string) => Promise<Result & { days?: number; bills?: number }>;
   can: (permission: CashierPermission) => boolean;
 }
 
@@ -624,6 +630,27 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
   const updateCustomer = (id: string, updates: Partial<Customer>) =>
     commitOps([updateOp(doc(db, 'customers', id), toUpdate(updates))]);
 
+  // Today's purchase price, used for bills made before cost was recorded on each line
+  const costOf = (productId: string) => products.find(p => p.id === productId)?.purchase_price;
+
+  // A merge-set of increments: billing adds to the day's profit without reading it,
+  // so cashiers without the profit permission can still bill
+  const profitIncrement = (date: string, p: SaleProfit, sign: 1 | -1) => ({
+    date,
+    bills: increment(sign),
+    revenue: increment(sign * p.revenue),
+    cost: increment(sign * p.cost),
+    tax: increment(sign * p.tax),
+    discount: increment(sign * p.discount),
+    estimated_cost_bills: increment(p.estimated ? sign : 0),
+    products: Object.fromEntries(
+      Object.entries(p.products).map(([pid, line]) => [
+        pid,
+        { name: line.name, qty: increment(sign * line.qty), revenue: increment(sign * line.revenue), cost: increment(sign * line.cost) },
+      ])
+    ),
+  });
+
   // Create Sale - Business Rules 1, 2, 3, 4, 8, 10
   // Runs as one Firestore transaction: fresh stock is read and re-checked, so two counters
   // can't sell the last packet twice (replaces SELECT … FOR UPDATE from the plan).
@@ -740,6 +767,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
             discount: lineDiscount,
             tax: lineTax,
             line_total: lineTotal,
+            unit_cost: product.purchase_price || 0,
           };
         });
 
@@ -773,6 +801,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
           is_offline_entry: Boolean(input.is_offline_entry),
           offline_bill_ref: input.offline_bill_ref,
           items: saleItems,
+          profit_tracked: true,
           created_by: currentUser.id,
           created_by_name: currentUser.name,
           created_at: nowIso,
@@ -781,6 +810,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
         // Rule 3: sale + items + stock movements + ledger entry commit together
         tx.set(counterRef, { last: last + 1 });
         tx.set(saleRef, sale);
+        tx.set(doc(db, 'daily_profit', businessDate), profitIncrement(businessDate, saleProfit(sale, costOf), 1), { merge: true });
         qtyByProduct.forEach((qty, pid) => {
           tx.update(doc(db, 'products', pid), {
             current_stock: r3(fresh.get(pid)!.current_stock - qty),
@@ -915,6 +945,15 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
           };
           tx.set(lref, ledgerEntry);
           tx.update(customerSnap.ref, { current_dues: newDues });
+        }
+
+        // Take the bill back out of its day's profit (bills made before profit tracking were never added)
+        if (sale.profit_tracked) {
+          tx.set(
+            doc(db, 'daily_profit', sale.business_date),
+            profitIncrement(sale.business_date, saleProfit(sale, costOf), -1),
+            { merge: true }
+          );
         }
 
         // 3. Update sale status
@@ -1687,6 +1726,45 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
     ]);
   };
 
+  // Day summaries in [from, to] (YYYY-MM-DD, inclusive); days with no bills are simply absent
+  const fetchDailyProfit = async (from: string, to: string): Promise<DailyProfit[]> => {
+    const snap = await getDocs(query(collection(db, 'daily_profit'), where('date', '>=', from), where('date', '<=', to)));
+    return snap.docs.map(d => d.data() as DailyProfit);
+  };
+
+  // Recomputes day summaries from the bills themselves (fills in bills made before tracking, fixes drift)
+  const rebuildDailyProfit = async (from: string, to: string): Promise<Result & { days?: number; bills?: number }> => {
+    if (currentUser.role !== 'owner') return { success: false, error: 'Only the Owner can rebuild profit data.' };
+    if (!from || !to || from > to) return { success: false, error: 'Choose a valid date range.' };
+    if (!navigator.onLine) return { success: false, error: 'No internet connection.' };
+    try {
+      const [salesSnap, existing] = await Promise.all([
+        getDocs(query(collection(db, 'sales'), where('business_date', '>=', from), where('business_date', '<=', to))),
+        fetchDailyProfit(from, to),
+      ]);
+      const days = new Map<string, DailyProfit>();
+      // Days that had a summary but no longer have completed bills are reset to zero
+      existing.forEach(d => days.set(d.date, emptyDay(d.date)));
+      let bills = 0;
+      salesSnap.docs.forEach(d => {
+        const sale = { ...d.data(), id: d.id } as Sale;
+        if (sale.status !== 'completed') return;
+        const day = days.get(sale.business_date) ?? emptyDay(sale.business_date);
+        addSaleToDay(day, saleProfit(sale, costOf));
+        days.set(sale.business_date, day);
+        bills++;
+      });
+      const res = await commitOps([
+        ...Array.from(days.values()).map(day => setOp(doc(db, 'daily_profit', day.date), day)),
+        auditOp('REBUILD_DAILY_PROFIT', 'daily_profit', `${from}_${to}`, { from, to, days: days.size, bills }),
+      ]);
+      return res.success ? { ...res, days: days.size, bills } : res;
+    } catch (err) {
+      console.error(err);
+      return { success: false, error: friendlyFirebaseError(err) };
+    }
+  };
+
   const signOutUser = () => signOut(auth);
 
   if (!settingsDoc || !usersLoaded || !productsLoaded || !categoriesLoaded || !customersLoaded || !salesLoaded) {
@@ -1754,6 +1832,8 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
         changeOwnPin,
         toggleUserActive,
         updateUserPermissions,
+        fetchDailyProfit,
+        rebuildDailyProfit,
         can: (permission: CashierPermission) => can(currentUser, permission),
       }}
     >
