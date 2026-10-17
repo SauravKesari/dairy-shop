@@ -18,6 +18,7 @@ import {
   Rocket,
   LogOut,
 } from 'lucide-react';
+import { SHOW_DEV_TOOLS } from '../lib/firebase';
 
 export type NavTab =
   | 'pos'
@@ -214,29 +215,33 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                   <span>Product Catalog & CSV</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelectTab('deploy');
-                    setShowMoreMenu(false);
-                  }}
-                  className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-blue-700 font-semibold"
-                >
-                  <Rocket className="w-4 h-4 text-blue-600" />
-                  <span>Deployment & Go-Live</span>
-                </button>
+                {SHOW_DEV_TOOLS && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectTab('deploy');
+                        setShowMoreMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-blue-700 font-semibold"
+                    >
+                      <Rocket className="w-4 h-4 text-blue-600" />
+                      <span>Deployment & Go-Live</span>
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    onSelectTab('checklist');
-                    setShowMoreMenu(false);
-                  }}
-                  className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
-                >
-                  <ClipboardCheck className="w-4 h-4 text-blue-600" />
-                  <span>Go-Live Test Runner</span>
-                </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectTab('checklist');
+                        setShowMoreMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
+                    >
+                      <ClipboardCheck className="w-4 h-4 text-blue-600" />
+                      <span>Go-Live Test Runner</span>
+                    </button>
+                  </>
+                )}
 
                 {currentUser.role === 'owner' && (
                   <button
@@ -408,22 +413,26 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
         >
           Products
         </button>
-        <button
-          onClick={() => onSelectTab('deploy')}
-          className={`px-2.5 py-1 rounded-md whitespace-nowrap ${
-            currentTab === 'deploy' ? 'bg-slate-900 text-white' : 'text-slate-600'
-          }`}
-        >
-          Deploy
-        </button>
-        <button
-          onClick={() => onSelectTab('checklist')}
-          className={`px-2.5 py-1 rounded-md whitespace-nowrap ${
-            currentTab === 'checklist' ? 'bg-slate-900 text-white' : 'text-slate-600'
-          }`}
-        >
-          Acceptance Tests
-        </button>
+        {SHOW_DEV_TOOLS && (
+          <>
+            <button
+              onClick={() => onSelectTab('deploy')}
+              className={`px-2.5 py-1 rounded-md whitespace-nowrap ${
+                currentTab === 'deploy' ? 'bg-slate-900 text-white' : 'text-slate-600'
+              }`}
+            >
+              Deploy
+            </button>
+            <button
+              onClick={() => onSelectTab('checklist')}
+              className={`px-2.5 py-1 rounded-md whitespace-nowrap ${
+                currentTab === 'checklist' ? 'bg-slate-900 text-white' : 'text-slate-600'
+              }`}
+            >
+              Acceptance Tests
+            </button>
+          </>
+        )}
       </div>
     </header>
   );
