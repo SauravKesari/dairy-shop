@@ -34,6 +34,9 @@ const useEmulator = env.VITE_USE_EMULATOR === 'true';
 // Sales, stock movements and audit logs are loaded for this many days only (keeps reads in the free tier)
 export const HISTORY_DAYS = Number(env.VITE_HISTORY_DAYS) || 90;
 
+// Deploy guide and Go-Live test runner (writes real bills) are shown only on test builds
+export const SHOW_DEV_TOOLS = env.VITE_SHOW_DEV_TOOLS === 'true';
+
 const AUTH_EMAIL_DOMAIN = env.VITE_AUTH_EMAIL_DOMAIN || 'dairyshop.local';
 
 // Staff log in with mobile + PIN; Firebase Auth needs an email, so the mobile maps to a synthetic one

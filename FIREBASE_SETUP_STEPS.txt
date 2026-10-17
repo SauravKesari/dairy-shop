@@ -121,6 +121,16 @@ PART 6 - HOSTING (OPTIONAL, FREE, HTTPS)
    Open that link on the shop phone/tablet and use "Add to Home Screen".
    A custom domain can be added in the Firebase console -> Hosting -> Add custom domain.
 
+   Test site (dairy-shop-test project):
+     - Put the test project's firebaseConfig values in .env.test.local (same keys as .env.local)
+       and add VITE_SHOW_DEV_TOOLS=true. This shows the Deploy guide and the Go-Live test runner,
+       which only appear on test builds.
+     - Add the alias once:  firebase use --add   (pick dairy-shop-test, alias "test")
+     - Deploy rules once:   firebase deploy --only firestore:rules,firestore:indexes -P test
+     - Deploy the site:     npm run deploy:test
+       Live at https://dairy-shop-test.web.app
+     - Run "npm run build" again before any prod deploy, so dist/ holds the prod build.
+
 
 PART 7 - DAY-TO-DAY NOTES
 -------------------------

@@ -20,6 +20,7 @@ import { SettingsScreen } from './components/settings/SettingsScreen';
 import { UsersScreen } from './components/users/UsersScreen';
 import { GoLiveChecklist } from './components/testing/GoLiveChecklist';
 import { DeployScreen } from './components/deploy/DeployScreen';
+import { SHOW_DEV_TOOLS } from './lib/firebase';
 
 function AppContent() {
   const [currentTab, setCurrentTab] = useState<NavTab>('pos');
@@ -50,8 +51,8 @@ function AppContent() {
         )}
         {currentTab === 'settings' && <SettingsScreen />}
         {currentTab === 'users' && <UsersScreen />}
-        {currentTab === 'checklist' && <GoLiveChecklist />}
-        {currentTab === 'deploy' && <DeployScreen />}
+        {SHOW_DEV_TOOLS && currentTab === 'checklist' && <GoLiveChecklist />}
+        {SHOW_DEV_TOOLS && currentTab === 'deploy' && <DeployScreen />}
       </main>
 
       {/* Quiet Footer */}
