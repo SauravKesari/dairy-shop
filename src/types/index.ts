@@ -37,6 +37,7 @@ export interface Settings {
   receipt_footer: string;
   cashier_max_discount_percent: number;
   allow_negative_stock: boolean;
+  custom_units?: string[]; // Units added by the owner on top of the built-in list (src/lib/units.ts)
 }
 
 export interface Category {
@@ -45,7 +46,8 @@ export interface Category {
   active: boolean;
 }
 
-export type ProductUnit = 'L' | 'kg' | 'pkt' | 'cup' | 'bottle' | 'piece' | '500ml';
+// Built-in units live in src/lib/units.ts; the owner can add custom ones
+export type ProductUnit = string;
 
 export interface Product {
   id: string;

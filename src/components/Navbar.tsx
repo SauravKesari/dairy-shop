@@ -17,6 +17,7 @@ import {
   Package,
   Rocket,
   LogOut,
+  Tags,
 } from 'lucide-react';
 import { SHOW_DEV_TOOLS } from '../lib/firebase';
 
@@ -30,6 +31,7 @@ export type NavTab =
   | 'closing'
   | 'reports'
   | 'products'
+  | 'catalog_setup'
   | 'audit'
   | 'settings'
   | 'users'
@@ -192,7 +194,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
               type="button"
               onClick={() => setShowMoreMenu(!showMoreMenu)}
               className={`px-3 py-2 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1 ${
-                ['products', 'audit', 'settings', 'users', 'checklist'].includes(currentTab)
+                ['products', 'catalog_setup', 'audit', 'settings', 'users', 'checklist'].includes(currentTab)
                   ? 'bg-slate-100 text-slate-900 font-bold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
@@ -244,6 +246,20 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                       <span>Go-Live Test Runner</span>
                     </button>
                   </>
+                )}
+
+                {currentUser.role === 'owner' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelectTab('catalog_setup');
+                      setShowMoreMenu(false);
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
+                  >
+                    <Tags className="w-4 h-4 text-slate-500" />
+                    <span>Categories & Units</span>
+                  </button>
                 )}
 
                 {currentUser.role === 'owner' && (

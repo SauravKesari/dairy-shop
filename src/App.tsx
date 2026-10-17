@@ -15,6 +15,7 @@ import { ExpensesScreen } from './components/expenses/ExpensesScreen';
 import { DailyClosingScreen } from './components/closing/DailyClosingScreen';
 import { ReportsScreen } from './components/reports/ReportsScreen';
 import { ProductsCatalogScreen } from './components/products/ProductsCatalogScreen';
+import { CategoriesUnitsScreen } from './components/products/CategoriesUnitsScreen';
 import { AuditLogScreen } from './components/audit/AuditLogScreen';
 import { SettingsScreen } from './components/settings/SettingsScreen';
 import { UsersScreen } from './components/users/UsersScreen';
@@ -42,6 +43,7 @@ function AppContent() {
         {currentTab === 'closing' && <DailyClosingScreen />}
         {currentTab === 'reports' && can('view_reports') && <ReportsScreen />}
         {currentTab === 'products' && <ProductsCatalogScreen />}
+        {currentTab === 'catalog_setup' && <CategoriesUnitsScreen />}
         {currentTab === 'audit' && currentUser.role === 'owner' && <AuditLogScreen />}
         {currentTab === 'audit' && currentUser.role !== 'owner' && (
           <div className="p-12 text-center text-slate-500">
