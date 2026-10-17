@@ -2,8 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useDairy } from '../../context/DairyContext';
 import { Product, ProductUnit } from '../../types';
 import { Plus, Search, Upload, FileDown, Edit3, Power, Check, AlertCircle } from 'lucide-react';
-
-const PRODUCT_UNITS: ProductUnit[] = ['L', 'kg', 'pkt', 'cup', 'bottle', 'piece', '500ml'];
+import { allUnits, unitLabel } from '../../lib/units';
 
 export const ProductsCatalogScreen: React.FC = () => {
   const {
@@ -15,7 +14,43 @@ export const ProductsCatalogScreen: React.FC = () => {
     importProductsCSV,
     importCustomerDuesCSV,
     currentUser,
+    settings,
+    addCategory,
+    addCustomUnit,
   } = useDairy();
+
+  // Inline "+ New" for category and unit inside the product form (owner only)
+  const [newCategoryName, setNewCategoryName] = useState<string | null>(null);
+  const [newUnitName, setNewUnitName] = useState<string | null>(null);
+  const [isAddingOption, setIsAddingOption] = useState(false);
+
+  const handleAddCategory = async () => {
+    if (newCategoryName === null || isAddingOption) return;
+    setFormError(null);
+    setIsAddingOption(true);
+    const res = await addCategory(newCategoryName);
+    setIsAddingOption(false);
+    if (!res.success || !res.category) {
+      setFormError(res.error || 'Failed to add category');
+      return;
+    }
+    setCategoryId(res.category.id);
+    setNewCategoryName(null);
+  };
+
+  const handleAddUnit = async () => {
+    if (newUnitName === null || isAddingOption) return;
+    setFormError(null);
+    setIsAddingOption(true);
+    const res = await addCustomUnit(newUnitName);
+    setIsAddingOption(false);
+    if (!res.success) {
+      setFormError(res.error || 'Failed to add unit');
+      return;
+    }
+    setUnit(newUnitName.trim());
+    setNewUnitName(null);
+  };
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCat, setSelectedCat] = useState('all');
@@ -71,6 +106,8 @@ export const ProductsCatalogScreen: React.FC = () => {
     setTrackExpiry(true);
     setOpeningStock(0);
     setFormError(null);
+    setNewCategoryName(null);
+    setNewUnitName(null);
     setShowModal(true);
   };
 
@@ -88,6 +125,8 @@ export const ProductsCatalogScreen: React.FC = () => {
     setTrackExpiry(prod.track_expiry);
     setOpeningStock(0);
     setFormError(null);
+    setNewCategoryName(null);
+    setNewUnitName(null);
     setShowModal(true);
   };
 
@@ -97,6 +136,11 @@ export const ProductsCatalogScreen: React.FC = () => {
 
     if (!name.trim()) {
       setFormError('Product name is required.');
+      return;
+    }
+
+    if (!categoryId) {
+      setFormError('Please choose or add a category.');
       return;
     }
 
@@ -370,33 +414,129 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Category *</label>
-                  <select
-                    value={categoryId}
-                    onChange={e => setCategoryId(e.target.value)}
-                    className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
-                  >
-                    {categories.map(c => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-700 font-semibold">Category *</label>
+                    {currentUser.role === 'owner' && newCategoryName === null && (
+                      <button
+                        type="button"
+                        onClick={() => setNewCategoryName('')}
+                        className="text-[11px] text-blue-600 hover:text-blue-800 font-medium flex items-center gap-0.5"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>New</span>
+                      </button>
+                    )}
+                  </div>
+                  {newCategoryName === null ? (
+                    <select
+                      value={categoryId}
+                      onChange={e => setCategoryId(e.target.value)}
+                      className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
+                    >
+                      {categories.length === 0 && <option value="">Add a category first</option>}
+                      {categories.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="e.g. Sweets"
+                        value={newCategoryName}
+                        onChange={e => setNewCategoryName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCategory();
+                          }
+                        }}
+                        className="w-full min-w-0 p-2 border border-slate-200 rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        disabled={isAddingOption}
+                        onClick={handleAddCategory}
+                        className="px-2 bg-slate-900 text-white rounded-lg font-semibold disabled:opacity-60"
+                      >
+                        Add
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewCategoryName(null)}
+                        className="px-1.5 text-slate-500 hover:text-slate-900"
+                        title="Cancel"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Unit of Measure *</label>
-                  <select
-                    value={unit}
-                    onChange={e => setUnit(e.target.value as ProductUnit)}
-                    className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
-                  >
-                    {PRODUCT_UNITS.map(u => (
-                      <option key={u} value={u}>
-                        {u} (e.g. {u === 'L' ? 'Litres' : u === 'kg' ? 'Kilograms' : 'Packet'})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-slate-700 font-semibold">Unit of Measure *</label>
+                    {currentUser.role === 'owner' && newUnitName === null && (
+                      <button
+                        type="button"
+                        onClick={() => setNewUnitName('')}
+                        className="text-[11px] text-blue-600 hover:text-blue-800 font-medium flex items-center gap-0.5"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>New</span>
+                      </button>
+                    )}
+                  </div>
+                  {newUnitName === null ? (
+                    <select
+                      value={unit}
+                      onChange={e => setUnit(e.target.value as ProductUnit)}
+                      className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
+                    >
+                      {allUnits(settings, unit).map(u => (
+                        <option key={u} value={u}>
+                          {unitLabel(u) ? `${u} (${unitLabel(u)})` : u}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        autoFocus
+                        maxLength={12}
+                        placeholder="e.g. dozen, g, box"
+                        value={newUnitName}
+                        onChange={e => setNewUnitName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddUnit();
+                          }
+                        }}
+                        className="w-full min-w-0 p-2 border border-slate-200 rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        disabled={isAddingOption}
+                        onClick={handleAddUnit}
+                        className="px-2 bg-slate-900 text-white rounded-lg font-semibold disabled:opacity-60"
+                      >
+                        Add
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewUnitName(null)}
+                        className="px-1.5 text-slate-500 hover:text-slate-900"
+                        title="Cancel"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 

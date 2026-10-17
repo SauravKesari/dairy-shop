@@ -9,6 +9,7 @@ import {
   writeBatch,
   runTransaction,
   increment,
+  arrayUnion,
   deleteField,
   DocumentReference,
   DocumentData,
@@ -60,6 +61,7 @@ import {
 } from '../data/initialData';
 import { LoginScreen, AuthStatus } from '../components/auth/LoginScreen';
 import { can, permissionDenied } from '../lib/permissions';
+import { allUnits } from '../lib/units';
 
 interface NewSaleItemInput {
   product_id: string;
@@ -104,7 +106,8 @@ interface DairyContextType {
   settings: Settings;
   updateSettings: (newSettings: Partial<Settings>) => Promise<Result>;
   categories: Category[];
-  addCategory: (name: string) => Promise<Result>;
+  addCategory: (name: string) => Promise<Result & { category?: Category }>;
+  addCustomUnit: (unit: string) => Promise<Result>;
   products: Product[];
   addProduct: (product: Omit<Product, 'id' | 'current_stock' | 'created_at' | 'updated_at'>, opening_stock?: number) => Promise<Result>;
   updateProduct: (id: string, updates: Partial<Product>) => Promise<Result>;
@@ -422,9 +425,33 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
     ]);
 
   // Categories
-  const addCategory = (name: string) => {
+  const addCategory = async (name: string): Promise<Result & { category?: Category }> => {
+    if (currentUser.role !== 'owner') return { success: false, error: 'Only the Owner can add categories.' };
+    const trimmed = name.trim();
+    if (!trimmed) return { success: false, error: 'Category name is required.' };
+    if (categories.some(c => c.name.toLowerCase() === trimmed.toLowerCase())) {
+      return { success: false, error: `Category "${trimmed}" already exists.` };
+    }
     const ref = newRef('categories');
-    return commitOps([setOp(ref, { id: ref.id, name: name.trim(), active: true })]);
+    const category: Category = { id: ref.id, name: trimmed, active: true };
+    const res = await commitOps([setOp(ref, category), auditOp('CREATE_CATEGORY', 'category', ref.id, { name: trimmed })]);
+    return res.success ? { ...res, category } : res;
+  };
+
+  const addCustomUnit = (unit: string): Promise<Result> => {
+    if (currentUser.role !== 'owner') {
+      return Promise.resolve({ success: false, error: 'Only the Owner can add units.' });
+    }
+    const trimmed = unit.trim();
+    if (!trimmed) return Promise.resolve({ success: false, error: 'Unit name is required.' });
+    if (trimmed.length > 12) return Promise.resolve({ success: false, error: 'Keep the unit short (12 characters max), e.g. "dozen".' });
+    if (allUnits(settings).some(u => u.toLowerCase() === trimmed.toLowerCase())) {
+      return Promise.resolve({ success: false, error: `Unit "${trimmed}" already exists.` });
+    }
+    return commitOps([
+      b => b.set(doc(db, 'settings', 'shop'), { custom_units: arrayUnion(trimmed) }, { merge: true }),
+      auditOp('ADD_CUSTOM_UNIT', 'settings', 'global', { unit: trimmed }),
+    ]);
   };
 
   // Products
@@ -1581,6 +1608,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
         updateSettings,
         categories,
         addCategory,
+        addCustomUnit,
         products,
         addProduct,
         updateProduct,
