@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useDairy } from '../../context/DairyContext';
-import { FileSpreadsheet, Download, Calendar, DollarSign, Package, TrendingUp, Users } from 'lucide-react';
+import { FileSpreadsheet, FileText, Download, Calendar, DollarSign, Package, TrendingUp, Users } from 'lucide-react';
 
 type ReportType =
   | 'daily_summary'
@@ -20,6 +20,7 @@ export const ReportsScreen: React.FC = () => {
     dailyClosings,
     customerLedger,
     currentBusinessDate,
+    settings,
   } = useDairy();
 
   const [activeReport, setActiveReport] = useState<ReportType>('daily_summary');
@@ -34,6 +35,7 @@ export const ReportsScreen: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // 1. Daily Summary Report
@@ -151,58 +153,115 @@ export const ReportsScreen: React.FC = () => {
     });
   };
 
+  // One table per report, shared by the CSV and PDF exports
+  type ExportTable = { filename: string; title: string; headers: string[]; rows: (string | number)[][] };
+
+  const getExportTable = (): ExportTable => {
+    if (activeReport === 'daily_summary') {
+      return {
+        filename: 'daily_summary_report',
+        title: 'Daily Summary',
+        headers: ['Date', 'Bills Count', 'Cash Sales', 'UPI Sales', 'Card Sales', 'Credit (Udhaar)', 'Total Sales', 'Expenses', 'Dues Collected'],
+        rows: getDailySummaryData().map(d => [d.date, d.bills_count, d.cash, d.upi, d.card, d.credit, d.total_sales, d.expenses, d.dues_collected]),
+      };
+    }
+    if (activeReport === 'product_sales') {
+      return {
+        filename: 'product_wise_sales_report',
+        title: 'Product-wise Sales',
+        headers: ['Product Name', 'Category', 'Quantity Sold', 'Unit', 'Total Revenue'],
+        rows: getProductSalesData().map(d => [d.product_name, d.category, d.qty_sold, d.unit, d.revenue]),
+      };
+    }
+    if (activeReport === 'monthly_sales') {
+      return {
+        filename: 'monthly_sales_report',
+        title: 'Monthly Sales',
+        headers: ['Month', 'Bills Count', 'Total Revenue'],
+        rows: getMonthlySalesData().map(d => [d.month, d.count, d.sales]),
+      };
+    }
+    if (activeReport === 'expenses') {
+      return {
+        filename: 'expense_breakdown_report',
+        title: 'Expenses by Category',
+        headers: ['Category', 'Entries Count', 'Total Amount'],
+        rows: getExpensesData().map(d => [d.category, d.count, d.total]),
+      };
+    }
+    if (activeReport === 'credit_dues') {
+      return {
+        filename: 'customer_credit_dues_report',
+        title: 'Credit (Udhaar) Dues',
+        headers: ['Customer Name', 'Mobile', 'Credit Limit', 'Current Outstanding Dues'],
+        rows: getCreditDuesData().map(d => [d.name, d.mobile, d.limit, d.dues]),
+      };
+    }
+    return {
+      filename: 'stock_valuation_report',
+      title: 'Stock Valuation',
+      headers: ['Product Name', 'SKU', 'Category', 'Current Stock', 'Unit', 'Cost Price', 'Selling Price', 'Stock Valuation'],
+      rows: getStockValuationData().map(d => [d.name, d.sku, d.category, d.stock, d.unit, d.cost, d.selling, d.valuation]),
+    };
+  };
+
+  const csvCell = (v: string | number) => (typeof v === 'number' ? String(v) : `"${v.replace(/"/g, '""')}"`);
+
   // Export handlers
   const handleExportCSV = () => {
-    if (activeReport === 'daily_summary') {
-      const data = getDailySummaryData();
-      const csv = [
-        'Date,Bills Count,Cash Sales,UPI Sales,Card Sales,Credit (Udhaar),Total Sales,Expenses,Dues Collected',
-        ...data.map(
-          d =>
-            `"${d.date}",${d.bills_count},${d.cash},${d.upi},${d.card},${d.credit},${d.total_sales},${d.expenses},${d.dues_collected}`
+    const table = getExportTable();
+    const csv = [table.headers.map(csvCell), ...table.rows.map(r => r.map(csvCell))].map(r => r.join(',')).join('\n');
+    downloadCSV(table.filename, csv);
+  };
+
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+
+  const handleExportPDF = async () => {
+    if (isExportingPDF) return;
+    setIsExportingPDF(true);
+    try {
+      // Loaded on demand so the PDF library stays out of the main bundle
+      const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
+      const table = getExportTable();
+      const pdf = new jsPDF({ orientation: table.headers.length > 5 ? 'landscape' : 'portrait', unit: 'pt', format: 'a4' });
+
+      pdf.setFontSize(14);
+      pdf.text(settings.shop_name || 'Dairy Shop', 40, 40);
+      pdf.setFontSize(10);
+      pdf.text(`${table.title} report · generated ${currentBusinessDate}`, 40, 58);
+
+      // jsPDF's built-in fonts have no ₹ glyph, so amounts print as plain numbers
+      const fmt = (v: string | number) =>
+        typeof v === 'number' ? v.toLocaleString('en-IN', { maximumFractionDigits: 3 }) : v;
+      const numericCols = table.headers.map((_, i) => table.rows.length > 0 && table.rows.every(r => typeof r[i] === 'number'));
+
+      autoTable(pdf, {
+        startY: 72,
+        head: [table.headers],
+        body: table.rows.map(r => r.map(fmt)),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [15, 23, 42] },
+        columnStyles: Object.fromEntries(
+          numericCols.flatMap((isNum, i) => (isNum ? [[i, { halign: 'right' as const }]] : []))
         ),
-      ].join('\n');
-      downloadCSV('daily_summary_report', csv);
-    } else if (activeReport === 'product_sales') {
-      const data = getProductSalesData();
-      const csv = [
-        'Product Name,Category,Quantity Sold,Unit,Total Revenue',
-        ...data.map(
-          d => `"${d.product_name}","${d.category}",${d.qty_sold},"${d.unit}",${d.revenue}`
-        ),
-      ].join('\n');
-      downloadCSV('product_wise_sales_report', csv);
-    } else if (activeReport === 'monthly_sales') {
-      const data = getMonthlySalesData();
-      const csv = [
-        'Month,Bills Count,Total Revenue',
-        ...data.map(d => `"${d.month}",${d.count},${d.sales}`),
-      ].join('\n');
-      downloadCSV('monthly_sales_report', csv);
-    } else if (activeReport === 'expenses') {
-      const data = getExpensesData();
-      const csv = [
-        'Category,Entries Count,Total Amount',
-        ...data.map(d => `"${d.category}",${d.count},${d.total}`),
-      ].join('\n');
-      downloadCSV('expense_breakdown_report', csv);
-    } else if (activeReport === 'credit_dues') {
-      const data = getCreditDuesData();
-      const csv = [
-        'Customer Name,Mobile,Credit Limit,Current Outstanding Dues',
-        ...data.map(d => `"${d.name}","${d.mobile}",${d.limit},${d.dues}`),
-      ].join('\n');
-      downloadCSV('customer_credit_dues_report', csv);
-    } else if (activeReport === 'current_stock') {
-      const data = getStockValuationData();
-      const csv = [
-        'Product Name,SKU,Category,Current Stock,Unit,Cost Price,Selling Price,Stock Valuation',
-        ...data.map(
-          d =>
-            `"${d.name}","${d.sku}","${d.category}",${d.stock},"${d.unit}",${d.cost},${d.selling},${d.valuation}`
-        ),
-      ].join('\n');
-      downloadCSV('stock_valuation_report', csv);
+        didDrawPage: () => {
+          const pageSize = pdf.internal.pageSize;
+          pdf.setFontSize(8);
+          pdf.text(
+            `Page ${pdf.getNumberOfPages()} · Amounts in Rs.`,
+            pageSize.getWidth() - 40,
+            pageSize.getHeight() - 20,
+            { align: 'right' }
+          );
+        },
+      });
+
+      pdf.save(`${table.filename}_${currentBusinessDate}.pdf`);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      alert('Could not create the PDF. Please try again.');
+    } finally {
+      setIsExportingPDF(false);
     }
   };
 
@@ -215,18 +274,29 @@ export const ReportsScreen: React.FC = () => {
             Parlour Reports & Analytics
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Standard shop operational reports with instant one-click CSV export
+            Standard shop operational reports with one-click CSV and PDF export
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleExportCSV}
-          className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors self-start sm:self-auto"
-        >
-          <Download className="w-4 h-4" />
-          <span>Export Current Report to CSV</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export Current Report to CSV</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleExportPDF}
+            disabled={isExportingPDF}
+            className="flex items-center gap-1.5 px-4 py-2 bg-red-700 hover:bg-red-800 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors disabled:opacity-60"
+          >
+            <FileText className="w-4 h-4" />
+            <span>{isExportingPDF ? 'Preparing PDF…' : 'Download PDF'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Report Selector Pills */}

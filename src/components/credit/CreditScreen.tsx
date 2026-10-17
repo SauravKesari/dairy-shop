@@ -20,9 +20,20 @@ export const CreditScreen: React.FC = () => {
     customers,
     customerLedger,
     recordCustomerPayment,
+    addCustomerDues,
     addCustomer,
     updateCustomer,
+    can,
   } = useDairy();
+
+  // Add Udhaar (manual dues) Modal
+  const [showAddDuesModal, setShowAddDuesModal] = useState(false);
+  const [duesCustomerId, setDuesCustomerId] = useState('');
+  const [duesSearch, setDuesSearch] = useState('');
+  const [duesAmount, setDuesAmount] = useState<number>(0);
+  const [duesNote, setDuesNote] = useState('');
+  const [duesError, setDuesError] = useState<string | null>(null);
+  const [isSavingDues, setIsSavingDues] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -80,6 +91,54 @@ export const CreditScreen: React.FC = () => {
     setPaymentNote('');
   };
 
+  const duesCustomer = customers.find(c => c.id === duesCustomerId) || null;
+
+  const duesCustomerOptions = useMemo(() => {
+    const q = duesSearch.toLowerCase().trim();
+    return customers
+      .filter(c => c.active !== false)
+      .filter(c => !q || c.name.toLowerCase().includes(q) || c.mobile.includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [customers, duesSearch]);
+
+  const openAddDuesModal = () => {
+    setDuesCustomerId('');
+    setDuesSearch('');
+    setDuesAmount(0);
+    setDuesNote('');
+    setDuesError(null);
+    setShowAddDuesModal(true);
+  };
+
+  const handleConfirmAddDues = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSavingDues) return;
+    setDuesError(null);
+
+    if (!duesCustomer) {
+      setDuesError('Please select a customer.');
+      return;
+    }
+    if (duesAmount <= 0) {
+      setDuesError('Amount must be greater than ₹0.');
+      return;
+    }
+    if (!duesNote.trim()) {
+      setDuesError('Please write what was given on Udhaar.');
+      return;
+    }
+
+    setIsSavingDues(true);
+    const res = await addCustomerDues(duesCustomer.id, duesAmount, duesNote);
+    setIsSavingDues(false);
+
+    if (!res.success) {
+      setDuesError(res.error || 'Failed to add Udhaar');
+      return;
+    }
+    setShowAddDuesModal(false);
+  };
+
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCustName.trim()) return;
@@ -122,14 +181,28 @@ export const CreditScreen: React.FC = () => {
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Udhaar Customer</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {can('add_customers') && (
+          <button
+            type="button"
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Udhaar Customer</span>
+          </button>
+          )}
+          {can('add_udhaar') && (
+          <button
+            type="button"
+            onClick={openAddDuesModal}
+            className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Udhaar</span>
+          </button>
+          )}
+        </div>
       </div>
 
       {/* Overview Cards */}
@@ -218,6 +291,7 @@ export const CreditScreen: React.FC = () => {
                   <td className="py-3 px-4 text-center whitespace-nowrap">
                     <div className="flex items-center justify-center gap-2">
                       {/* Receive Payment Button */}
+                      {can('receive_payments') && (
                       <button
                         type="button"
                         onClick={() => {
@@ -231,6 +305,7 @@ export const CreditScreen: React.FC = () => {
                         <ArrowDownLeft className="w-3.5 h-3.5" />
                         <span>Receive Payment</span>
                       </button>
+                      )}
 
                       {/* Passbook / Ledger Statement Button */}
                       <button
@@ -296,6 +371,8 @@ export const CreditScreen: React.FC = () => {
                             ? 'Credit Bill'
                             : entry.type === 'payment'
                             ? 'Payment Recd'
+                            : entry.type === 'adjustment' && entry.amount > 0
+                            ? 'Udhaar Added'
                             : entry.type}
                         </td>
                         <td className="py-2 px-3 font-sans text-slate-600 text-[11px]">
@@ -428,6 +505,130 @@ export const CreditScreen: React.FC = () => {
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-sm"
                 >
                   Record Payment (₹{paymentAmount || 0})
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Udhaar (manual dues) Modal */}
+      {showAddDuesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5 space-y-4">
+            <div>
+              <h3 className="font-bold text-slate-900 text-base">Add Udhaar</h3>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Goods or cash given without a bill. Adds to the customer's dues.
+              </p>
+            </div>
+
+            {duesError && (
+              <p className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">{duesError}</p>
+            )}
+
+            <form onSubmit={handleConfirmAddDues} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Customer *</label>
+                {duesCustomer ? (
+                  <div className="flex items-center justify-between p-2 border border-slate-200 rounded-lg bg-slate-50">
+                    <div>
+                      <span className="font-semibold text-slate-900 block">{duesCustomer.name}</span>
+                      <span className="font-mono-numbers text-slate-500">
+                        {duesCustomer.mobile} · Dues ₹{duesCustomer.current_dues.toFixed(2)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDuesCustomerId('')}
+                      className="text-slate-500 hover:text-slate-900 font-medium"
+                    >
+                      Change
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="Search name or mobile..."
+                        value={duesSearch}
+                        onChange={e => setDuesSearch(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg"
+                      />
+                    </div>
+                    <div className="mt-1 max-h-40 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+                      {duesCustomerOptions.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setDuesCustomerId(c.id)}
+                          className="w-full text-left px-3 py-2 hover:bg-slate-50 flex justify-between gap-2"
+                        >
+                          <span className="font-medium text-slate-800 truncate">{c.name}</span>
+                          <span className="font-mono-numbers text-slate-500 whitespace-nowrap">
+                            ₹{c.current_dues.toFixed(2)}
+                          </span>
+                        </button>
+                      ))}
+                      {duesCustomerOptions.length === 0 && (
+                        <p className="px-3 py-2 text-slate-500">
+                          No customer found. Use "New Udhaar Customer" first.
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Amount (₹) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  min="0.01"
+                  value={duesAmount || ''}
+                  onChange={e => setDuesAmount(parseFloat(e.target.value) || 0)}
+                  className="w-full p-2.5 border border-slate-200 rounded-lg text-sm font-bold font-mono-numbers"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Note *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 2 L milk taken at night, cash lent..."
+                  value={duesNote}
+                  onChange={e => setDuesNote(e.target.value)}
+                  className="w-full p-2 border border-slate-200 rounded-lg"
+                />
+              </div>
+
+              {duesCustomer && duesAmount > 0 && (
+                <p className="text-xs text-amber-800 bg-amber-50 p-1.5 rounded font-mono-numbers">
+                  New dues: <strong>₹{(duesCustomer.current_dues + duesAmount).toFixed(2)}</strong>
+                  {duesCustomer.credit_limit ? ` (limit ₹${duesCustomer.credit_limit})` : ''}
+                </p>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddDuesModal(false)}
+                  className="px-3 py-1.5 text-slate-600 hover:text-slate-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingDues}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg shadow-sm disabled:opacity-60"
+                >
+                  {isSavingDues ? 'Saving…' : `Add Udhaar (₹${duesAmount || 0})`}
                 </button>
               </div>
             </form>

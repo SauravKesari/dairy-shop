@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useDairy } from '../../context/DairyContext';
-import { Users, Plus, Key, Power, ShieldCheck, UserCheck } from 'lucide-react';
+import { Users, Plus, Key, Power, ShieldCheck, UserCheck, SlidersHorizontal } from 'lucide-react';
+import { CashierPermissions, User } from '../../types';
+import { can, PERMISSION_LABELS } from '../../lib/permissions';
 
 export const UsersScreen: React.FC = () => {
   const {
@@ -9,7 +11,32 @@ export const UsersScreen: React.FC = () => {
     addUser,
     changeOwnPin,
     toggleUserActive,
+    updateUserPermissions,
   } = useDairy();
+
+  // Per-cashier permissions modal (owner only)
+  const [permUser, setPermUser] = useState<User | null>(null);
+  const [permDraft, setPermDraft] = useState<CashierPermissions>({});
+
+  const openPermissions = (u: User) => {
+    // Store every key explicitly so the saved record shows exactly what is on and off
+    setPermDraft(Object.fromEntries(PERMISSION_LABELS.map(p => [p.key, can(u, p.key)])));
+    setFormError(null);
+    setPermUser(u);
+  };
+
+  const handleSavePermissions = async () => {
+    if (!permUser) return;
+    setFormError(null);
+    setSaving(true);
+    const res = await updateUserPermissions(permUser.id, permDraft);
+    setSaving(false);
+    if (!res.success) {
+      setFormError(res.error || 'Failed to save permissions');
+      return;
+    }
+    setPermUser(null);
+  };
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [name, setName] = useState('');
@@ -160,6 +187,18 @@ export const UsersScreen: React.FC = () => {
                         </span>
                       )}
 
+                      {currentUser.role === 'owner' && u.role === 'cashier' && (
+                        <button
+                          type="button"
+                          onClick={() => openPermissions(u)}
+                          className="p-1 text-slate-500 hover:text-blue-700 hover:bg-slate-100 rounded flex items-center gap-1"
+                          title="What this cashier is allowed to do"
+                        >
+                          <SlidersHorizontal className="w-3.5 h-3.5" />
+                          <span className="text-[11px] font-medium">Permissions</span>
+                        </button>
+                      )}
+
                       {currentUser.role === 'owner' && u.id !== currentUser.id && (
                         <button
                           type="button"
@@ -178,6 +217,54 @@ export const UsersScreen: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Cashier Permissions Modal */}
+      {permUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 space-y-3 text-xs">
+            <div>
+              <h3 className="font-bold text-slate-900 text-base">Permissions — {permUser.name}</h3>
+              <p className="text-slate-500 mt-0.5">
+                Billing (cash / UPI / card) is always allowed. Untick anything this cashier should not do.
+              </p>
+            </div>
+            {errorBox}
+            <div className="divide-y divide-slate-100 border border-slate-200 rounded-lg">
+              {PERMISSION_LABELS.map(p => (
+                <label key={p.key} className="flex items-start gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 w-4 h-4 accent-slate-900"
+                    checked={permDraft[p.key] !== false}
+                    onChange={e => setPermDraft(d => ({ ...d, [p.key]: e.target.checked }))}
+                  />
+                  <span>
+                    <span className="font-semibold text-slate-800 block">{p.label}</span>
+                    <span className="text-slate-500">{p.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setPermUser(null)}
+                className="px-3 py-1.5 text-slate-600 hover:text-slate-900"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleSavePermissions}
+                className="px-4 py-1.5 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 disabled:opacity-60"
+              >
+                {saving ? 'Saving…' : 'Save Permissions'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add User Modal */}
       {showAddModal && (

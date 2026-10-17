@@ -11,6 +11,7 @@ export const PurchasesScreen: React.FC = () => {
     createPurchase,
     addSupplier,
     currentBusinessDate,
+    can,
   } = useDairy();
 
   const [showNewPurchaseModal, setShowNewPurchaseModal] = useState(false);
@@ -152,6 +153,7 @@ export const PurchasesScreen: React.FC = () => {
             <span>Add Supplier</span>
           </button>
 
+          {can('record_purchases') && (
           <button
             type="button"
             onClick={() => setShowNewPurchaseModal(true)}
@@ -160,6 +162,7 @@ export const PurchasesScreen: React.FC = () => {
             <Plus className="w-4 h-4" />
             <span>New Purchase Entry</span>
           </button>
+          )}
         </div>
       </div>
 

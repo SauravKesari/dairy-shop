@@ -50,6 +50,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
     setCurrentBusinessDate,
     isDateClosed,
     expiryAlerts,
+    can,
   } = useDairy();
 
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -170,6 +171,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             />
           </button>
 
+          {can('view_reports') && (
           <button
             type="button"
             onClick={() => onSelectTab('reports')}
@@ -182,6 +184,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             <BarChart3 className="w-3.5 h-3.5" />
             <span>Reports</span>
           </button>
+          )}
 
           {/* More Dropdown */}
           <div className="relative">
@@ -397,6 +400,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
         >
           Closing
         </button>
+        {can('view_reports') && (
         <button
           onClick={() => onSelectTab('reports')}
           className={`px-2.5 py-1 rounded-md whitespace-nowrap ${
@@ -405,6 +409,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
         >
           Reports
         </button>
+        )}
         <button
           onClick={() => onSelectTab('products')}
           className={`px-2.5 py-1 rounded-md whitespace-nowrap ${

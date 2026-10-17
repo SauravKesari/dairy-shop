@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 export const SalesHistory: React.FC = () => {
-  const { sales, currentUser, currentBusinessDate, cancelSale, isDateClosed } = useDairy();
+  const { sales, currentUser, currentBusinessDate, cancelSale, isDateClosed, can } = useDairy();
 
   const [dateFilter, setDateFilter] = useState<string>(currentBusinessDate);
   const [cashierFilter, setCashierFilter] = useState<string>('all');
@@ -225,8 +225,9 @@ export const SalesHistory: React.FC = () => {
                 filteredSales.map(sale => {
                   const isDayClosedForSale = isDateClosed(sale.business_date);
                   const isCashierBlocked =
-                    currentUser.role === 'cashier' &&
-                    (sale.business_date !== currentBusinessDate || isDayClosedForSale);
+                    !can('cancel_bills') ||
+                    (currentUser.role === 'cashier' &&
+                      (sale.business_date !== currentBusinessDate || isDayClosedForSale));
 
                   return (
                     <tr
@@ -336,7 +337,9 @@ export const SalesHistory: React.FC = () => {
                               }`}
                               title={
                                 isCashierBlocked
-                                  ? 'Cashiers cannot cancel past or closed-day sales. Owner required.'
+                                  ? !can('cancel_bills')
+                                    ? 'Cancelling bills is turned off for your account. Ask the Owner.'
+                                    : 'Cashiers cannot cancel past or closed-day sales. Owner required.'
                                   : 'Cancel Sale & Reverse Stock'
                               }
                             >

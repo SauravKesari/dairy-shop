@@ -20,6 +20,7 @@ export const DailyClosingScreen: React.FC = () => {
     reopenDailyClosing,
     currentUser,
     dailyClosings,
+    can,
   } = useDairy();
 
   const [selectedDate, setSelectedDate] = useState<string>(currentBusinessDate);
@@ -299,7 +300,9 @@ export const DailyClosingScreen: React.FC = () => {
               <button
                 type="button"
                 onClick={handleCloseDay}
-                className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2"
+                disabled={!can('daily_closing')}
+                title={can('daily_closing') ? undefined : 'Closing the day is turned off for your account. Ask the Owner.'}
+                className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 disabled:bg-slate-400 disabled:cursor-not-allowed"
               >
                 <Lock className="w-4 h-4" />
                 <span>Save Closing & Lock Day</span>
