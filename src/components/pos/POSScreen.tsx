@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useDairy } from '../../context/DairyContext';
 import { Product, PaymentMethod, Sale } from '../../types';
 import { ReceiptModal } from './ReceiptModal';
+import { UpiPaymentModal } from './UpiPaymentModal';
 import {
   Search,
   ShoppingCart,
@@ -169,6 +170,9 @@ export const POSScreen: React.FC = () => {
   // Guards against a double tap creating two bills while the transaction is in flight
   const [isCheckingOut, setIsCheckingOut] = useState(false);
 
+  // UPI bills show the payment QR first; the bill is saved once the cashier confirms payment
+  const [showUpiModal, setShowUpiModal] = useState(false);
+
   // Handle Checkout
   const handleCheckout = async () => {
     if (isCheckingOut) return;
@@ -191,6 +195,24 @@ export const POSScreen: React.FC = () => {
       return;
     }
 
+    // Paper bills were already paid during the outage, so they skip the QR
+    if (paymentMethod === 'upi' && !isOfflineEntry && totalPayable > 0) {
+      if (!settings.upi_id) {
+        setErrorBanner(
+          currentUser.role === 'owner'
+            ? 'UPI ID is not set. Add it in Settings to show the payment QR.'
+            : 'UPI ID is not set. Ask the Owner to add it in Settings.'
+        );
+        return;
+      }
+      setShowUpiModal(true);
+      return;
+    }
+
+    await saveSale();
+  };
+
+  const saveSale = async () => {
     setIsCheckingOut(true);
     const saleResult = await createSale({
       customer_id: selectedCustomerId || null,
@@ -207,6 +229,7 @@ export const POSScreen: React.FC = () => {
     });
 
     setIsCheckingOut(false);
+    setShowUpiModal(false);
 
     if (!saleResult.success) {
       setErrorBanner(saleResult.error || 'Failed to complete sale');
@@ -822,6 +845,18 @@ export const POSScreen: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* UPI Payment QR (before the bill is saved) */}
+      {showUpiModal && (
+        <UpiPaymentModal
+          upiId={settings.upi_id}
+          payeeName={settings.shop_name}
+          amount={totalPayable}
+          isSaving={isCheckingOut}
+          onConfirm={saveSale}
+          onCancel={() => setShowUpiModal(false)}
+        />
       )}
 
       {/* Sale Receipt Modal */}

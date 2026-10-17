@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import QRCode from 'qrcode';
 import { Sale } from '../../types';
 import { useDairy } from '../../context/DairyContext';
+import { buildUpiUrl } from '../../lib/upi';
 import { Printer, Share2, X, Check, Copy } from 'lucide-react';
 
 interface ReceiptModalProps {
@@ -23,10 +24,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
   // Generate UPI QR Code URL
   useEffect(() => {
     if (sale && canvasRef.current && settings.upi_id) {
-      // Standard Indian UPI Intent format
-      const upiUrl = `upi://pay?pa=${encodeURIComponent(settings.upi_id)}&pn=${encodeURIComponent(
-        settings.shop_name
-      )}&am=${sale.total.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Bill ${sale.invoice_no}`)}`;
+      const upiUrl = buildUpiUrl(settings.upi_id, settings.shop_name, sale.total, `Bill ${sale.invoice_no}`);
 
       QRCode.toCanvas(
         canvasRef.current,

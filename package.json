@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
+    "dev:test": "vite --mode test --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "build:test": "vite build --mode test",
     "deploy:test": "npm run build:test && firebase deploy --only hosting -P test",
