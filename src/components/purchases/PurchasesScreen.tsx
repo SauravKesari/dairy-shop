@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useDairy } from '../../context/DairyContext';
 import { Supplier, Purchase } from '../../types';
+import { isLooseUnit, qtyStep, parseQty } from '../../lib/units';
 import { Plus, Truck, FileText, Calendar, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export const PurchasesScreen: React.FC = () => {
@@ -35,6 +36,9 @@ export const PurchasesScreen: React.FC = () => {
   const [newSupAddress, setNewSupAddress] = useState('');
   const [newSupGst, setNewSupGst] = useState('');
 
+  // Until a product is picked the line counts in packs (whole numbers)
+  const lineUnit = (productId: string) => products.find(p => p.id === productId)?.unit || 'pkt';
+
   const handleLineProductChange = (index: number, productId: string) => {
     const prod = products.find(p => p.id === productId);
     setPurchaseLines(prev =>
@@ -43,6 +47,7 @@ export const PurchasesScreen: React.FC = () => {
           ? {
               ...line,
               product_id: productId,
+              qty: prod && !isLooseUnit(prod.unit) ? Math.max(1, Math.round(line.qty)) : line.qty,
               unit_cost: prod ? prod.purchase_price : 0,
             }
           : line
@@ -331,14 +336,15 @@ export const PurchasesScreen: React.FC = () => {
                         <label className="text-[10px] text-slate-500 block mb-0.5">Quantity</label>
                         <input
                           type="number"
-                          step="0.001"
+                          step={qtyStep(lineUnit(line.product_id))}
                           required
-                          min="0.001"
+                          min={qtyStep(lineUnit(line.product_id))}
+                          inputMode={isLooseUnit(lineUnit(line.product_id)) ? 'decimal' : 'numeric'}
                           value={line.qty}
                           onChange={e =>
                             setPurchaseLines(prev =>
                               prev.map((l, i) =>
-                                i === idx ? { ...l, qty: parseFloat(e.target.value) || 0 } : l
+                                i === idx ? { ...l, qty: parseQty(e.target.value, lineUnit(l.product_id)) } : l
                               )
                             )
                           }

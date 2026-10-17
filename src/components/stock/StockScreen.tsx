@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useDairy } from '../../context/DairyContext';
 import { Product, StockMovement } from '../../types';
+import { isLooseUnit, qtyStep, parseQty } from '../../lib/units';
 import {
   Boxes,
   AlertTriangle,
@@ -694,11 +695,12 @@ export const StockScreen: React.FC = () => {
                 </label>
                 <input
                   type="number"
-                  step="0.001"
+                  step={qtyStep(adjustingProduct.unit)}
                   required
+                  inputMode={isLooseUnit(adjustingProduct.unit) ? 'decimal' : 'numeric'}
                   placeholder="e.g. 2 or -2"
                   value={adjustQty || ''}
-                  onChange={e => setAdjustQty(parseFloat(e.target.value) || 0)}
+                  onChange={e => setAdjustQty(parseQty(e.target.value, adjustingProduct.unit))}
                   className="w-full p-2 border border-slate-200 rounded-lg font-mono-numbers font-semibold"
                 />
               </div>

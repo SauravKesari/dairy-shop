@@ -62,7 +62,7 @@ import {
 } from '../data/initialData';
 import { LoginScreen, AuthStatus } from '../components/auth/LoginScreen';
 import { can, permissionDenied } from '../lib/permissions';
-import { allUnits } from '../lib/units';
+import { allUnits, isValidQtyForUnit, wholeQtyError } from '../lib/units';
 
 interface NewSaleItemInput {
   product_id: string;
@@ -550,7 +550,12 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
   const addProduct = (
     prodInput: Omit<Product, 'id' | 'current_stock' | 'created_at' | 'updated_at'>,
     opening_stock = 0
-  ) => commitOps(productOps(prodInput, opening_stock));
+  ) => {
+    if (!isValidQtyForUnit(opening_stock, prodInput.unit)) {
+      return Promise.resolve({ success: false, error: wholeQtyError(prodInput.name, prodInput.unit, opening_stock) });
+    }
+    return commitOps(productOps(prodInput, opening_stock));
+  };
 
   const updateProduct = (id: string, updates: Partial<Product>) => {
     const old = products.find(p => p.id === id);
@@ -632,6 +637,12 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
     }
 
     if (input.items.length === 0) return { success: false, error: 'Cart is empty.' };
+    const fractionalPack = input.items
+      .map(item => ({ item, product: products.find(p => p.id === item.product_id) }))
+      .find(({ item, product }) => product && !isValidQtyForUnit(item.qty, product.unit));
+    if (fractionalPack?.product) {
+      return { success: false, error: wholeQtyError(fractionalPack.product.name, fractionalPack.product.unit, fractionalPack.item.qty) };
+    }
 
     // Cashier discount limit check
     if (currentUser.role === 'cashier' && input.discount > 0) {
@@ -945,6 +956,12 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
     }
     const missing = input.items.find(line => !products.some(p => p.id === line.product_id));
     if (missing) return Promise.resolve({ success: false, error: `Product not found: ${missing.product_id}` });
+    for (const line of input.items) {
+      const prod = products.find(p => p.id === line.product_id)!;
+      if (!isValidQtyForUnit(line.qty, prod.unit)) {
+        return Promise.resolve({ success: false, error: wholeQtyError(prod.name, prod.unit, line.qty) });
+      }
+    }
 
     const purchaseRef = newRef('purchases');
     const purchaseId = purchaseRef.id;
@@ -1047,6 +1064,9 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
         const snap = await tx.get(doc(db, 'products', productId));
         if (!snap.exists()) throw new BusinessError('Product not found');
         const product = { ...snap.data(), id: snap.id } as Product;
+        if (!isValidQtyForUnit(qtyChange, product.unit)) {
+          throw new BusinessError(wholeQtyError(product.name, product.unit, qtyChange));
+        }
 
         const newStock = r3(product.current_stock + qtyChange);
         if (!settings.allow_negative_stock && newStock < 0) {
@@ -1431,6 +1451,9 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
         const min_stock = parseFloat(cols[5]) || 10;
         const track_expiry = (cols[6] || 'yes').toLowerCase() === 'yes';
         const opening_stock = parseFloat(cols[7]) || 0;
+        if (!isValidQtyForUnit(opening_stock, unit)) {
+          return { success: false, count: 0, error: `Line ${i + 1}: ${wholeQtyError(name, unit, opening_stock)}` };
+        }
 
         let category = knownCategories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
         if (!category) {

@@ -3,6 +3,7 @@ import { useDairy } from '../../context/DairyContext';
 import { Product, PaymentMethod, Sale } from '../../types';
 import { ReceiptModal } from './ReceiptModal';
 import { UpiPaymentModal } from './UpiPaymentModal';
+import { isLooseUnit } from '../../lib/units';
 import {
   Search,
   ShoppingCart,
@@ -118,14 +119,16 @@ export const POSScreen: React.FC = () => {
     });
   };
 
-  const updateCartQty = (productId: string, newQty: number) => {
+  const updateCartQty = (productId: string, rawQty: number) => {
     setErrorBanner(null);
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    // Packs (pouch, pkt, cup, tin…) are counted in whole numbers; only loose L / kg take decimals
+    const newQty = isLooseUnit(product.unit) ? rawQty : Math.round(rawQty);
     if (newQty <= 0) {
       removeFromCart(productId);
       return;
     }
-    const product = products.find(p => p.id === productId);
-    if (!product) return;
 
     if (!settings.allow_negative_stock && newQty > product.current_stock) {
       setErrorBanner(
@@ -434,7 +437,7 @@ export const POSScreen: React.FC = () => {
                       </div>
 
                       {/* Dairy Quick Add Buttons for Loose Milk/Paneer vs Packets */}
-                      {product.unit === 'L' || product.unit === 'kg' ? (
+                      {isLooseUnit(product.unit) ? (
                         <div className="grid grid-cols-3 gap-1 mt-2">
                           <button
                             type="button"
@@ -565,12 +568,7 @@ export const POSScreen: React.FC = () => {
                     <button
                       type="button"
                       onClick={() =>
-                        updateCartQty(
-                          item.product.id,
-                          item.product.unit === 'L' || item.product.unit === 'kg'
-                            ? item.qty - 0.25
-                            : item.qty - 1
-                        )
+                        updateCartQty(item.product.id, item.qty - (isLooseUnit(item.product.unit) ? 0.25 : 1))
                       }
                       className="p-1 text-slate-600 hover:bg-slate-100 rounded"
                     >
@@ -579,8 +577,10 @@ export const POSScreen: React.FC = () => {
 
                     <input
                       type="number"
-                      step={item.product.unit === 'L' || item.product.unit === 'kg' ? '0.001' : '1'}
-                      min="0.001"
+                      // Browsers count spinner steps from `min`, so min must be a multiple of step
+                      step={isLooseUnit(item.product.unit) ? '0.001' : '1'}
+                      min={isLooseUnit(item.product.unit) ? '0.001' : '1'}
+                      inputMode={isLooseUnit(item.product.unit) ? 'decimal' : 'numeric'}
                       value={item.qty}
                       onChange={e =>
                         updateCartQty(item.product.id, parseFloat(e.target.value) || 0)
@@ -593,12 +593,7 @@ export const POSScreen: React.FC = () => {
                     <button
                       type="button"
                       onClick={() =>
-                        updateCartQty(
-                          item.product.id,
-                          item.product.unit === 'L' || item.product.unit === 'kg'
-                            ? item.qty + 0.25
-                            : item.qty + 1
-                        )
+                        updateCartQty(item.product.id, item.qty + (isLooseUnit(item.product.unit) ? 0.25 : 1))
                       }
                       className="p-1 text-slate-600 hover:bg-slate-100 rounded"
                     >
