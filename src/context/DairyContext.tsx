@@ -121,6 +121,7 @@ interface DairyContextType {
   adjustStock: (productId: string, type: 'damage' | 'expired' | 'adjustment', qtyChange: number, reason: string) => Promise<Result>;
   customerLedger: CustomerLedgerEntry[];
   recordCustomerPayment: (customerId: string, amount: number, paymentMethod: 'cash' | 'upi', note?: string) => Promise<Result>;
+  addCustomerDues: (customerId: string, amount: number, note: string) => Promise<Result>;
   expenses: Expense[];
   addExpense: (expense: Omit<Expense, 'id' | 'created_by' | 'created_by_name' | 'created_at'>) => Promise<Result>;
   updateExpense: (id: string, updates: Partial<Expense>) => Promise<Result>;
@@ -993,6 +994,63 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
     ]);
   };
 
+  // Manual Udhaar: goods or cash given to a customer without a bill
+  const addCustomerDues = async (customerId: string, amount: number, note: string): Promise<Result> => {
+    if (!(amount > 0)) return { success: false, error: 'Amount must be greater than zero.' };
+    if (!note || note.trim().length === 0) {
+      return { success: false, error: 'A note is mandatory (what was given on Udhaar).' };
+    }
+    if (currentUser.role === 'cashier' && isDateClosed(currentBusinessDate)) {
+      return { success: false, error: 'Cashier permission denied: Cannot add Udhaar on a closed day.' };
+    }
+    if (!navigator.onLine) return { success: false, error: 'No internet connection. Add the Udhaar once online.' };
+
+    try {
+      await runTransaction(db, async tx => {
+        const snap = await tx.get(doc(db, 'customers', customerId));
+        if (!snap.exists()) throw new BusinessError('Customer not found.');
+        const customer = { ...snap.data(), id: snap.id } as Customer;
+
+        const dues = Number(customer.current_dues) || 0;
+        const newDues = r2(dues + amount);
+        // Rule 10: same credit limit check as credit bills
+        if (customer.credit_limit !== null && customer.credit_limit !== undefined && newDues > customer.credit_limit) {
+          throw new BusinessError(
+            `Would exceed ${customer.name}'s credit limit of ₹${customer.credit_limit}. Current dues: ₹${dues}, Adding: ₹${amount} (Projected dues: ₹${newDues}).`
+          );
+        }
+
+        const nowIso = new Date().toISOString();
+        const lref = newRef('customer_ledger');
+        const entry: CustomerLedgerEntry = {
+          id: lref.id,
+          customer_id: customer.id,
+          type: 'adjustment',
+          amount: r2(amount),
+          balance_after: newDues,
+          note: note.trim(),
+          created_by: currentUser.id,
+          created_at: nowIso,
+        };
+        tx.set(lref, entry);
+        tx.update(snap.ref, { current_dues: newDues });
+        tx.set(
+          ...auditEntry('ADD_CUSTOMER_DUES', 'customer_ledger', customer.id, {
+            customer_name: customer.name,
+            amount: r2(amount),
+            note: note.trim(),
+            new_dues: newDues,
+          })
+        );
+      });
+      return { success: true };
+    } catch (err) {
+      if (err instanceof BusinessError) return { success: false, error: err.message };
+      console.error(err);
+      return { success: false, error: friendlyFirebaseError(err) };
+    }
+  };
+
   // Expenses
   const addExpense = (
     expenseInput: Omit<Expense, 'id' | 'created_by' | 'created_by_name' | 'created_at'>
@@ -1503,6 +1561,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
         adjustStock,
         customerLedger,
         recordCustomerPayment,
+        addCustomerDues,
         expenses,
         addExpense,
         updateExpense,
