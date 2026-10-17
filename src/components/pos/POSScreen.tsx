@@ -37,6 +37,7 @@ export const POSScreen: React.FC = () => {
     addCustomer,
     currentBusinessDate,
     isDateClosed,
+    can,
   } = useDairy();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -627,6 +628,7 @@ export const POSScreen: React.FC = () => {
                 <UserCheck className="w-3.5 h-3.5 text-slate-500" />
                 <span>Customer (Udhaar / Credit):</span>
               </label>
+              {can('add_customers') && (
               <button
                 type="button"
                 onClick={() => setShowAddCustomerModal(true)}
@@ -635,6 +637,7 @@ export const POSScreen: React.FC = () => {
                 <UserPlus className="w-3 h-3" />
                 <span>New Customer</span>
               </button>
+              )}
             </div>
 
             <select
@@ -667,7 +670,7 @@ export const POSScreen: React.FC = () => {
           {/* Payment Method Segmented Buttons */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-slate-700">Payment Mode:</label>
-            <div className="grid grid-cols-4 gap-1">
+            <div className={`grid gap-1 ${can('give_credit') ? 'grid-cols-4' : 'grid-cols-3'}`}>
               <button
                 type="button"
                 onClick={() => setPaymentMethod('cash')}
@@ -707,6 +710,7 @@ export const POSScreen: React.FC = () => {
                 <span>Card</span>
               </button>
 
+              {can('give_credit') && (
               <button
                 type="button"
                 onClick={() => setPaymentMethod('credit')}
@@ -719,6 +723,7 @@ export const POSScreen: React.FC = () => {
                 <Receipt className="w-4 h-4 mb-0.5" />
                 <span>Udhaar</span>
               </button>
+              )}
             </div>
           </div>
 

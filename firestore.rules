@@ -26,6 +26,11 @@ service cloud.firestore {
       return isActive() && me().role == 'owner';
     }
 
+    // Per-cashier permissions set by the owner; a missing key means allowed (matches src/lib/permissions.ts)
+    function can(p) {
+      return isOwner() || (isActive() && me().get('permissions', {}).get(p, true) != false);
+    }
+
     // Rule 8: after daily closing, cashiers can't create, cancel or back-date entries for that date
     function dayOpen(date) {
       let path = /databases/$(database)/documents/daily_closings/$(date);
@@ -92,7 +97,7 @@ service cloud.firestore {
 
     match /customers/{id} {
       allow read: if isActive();
-      allow create: if isActive();
+      allow create: if isActive() && can('add_customers');
       allow update: if isOwner() || (isActive() && onlyChanges(['current_dues']));
     }
 
@@ -101,6 +106,7 @@ service cloud.firestore {
       allow create: if isOwner()
         || (isActive() && createdByMe()
             && request.resource.data.status == 'completed'
+            && (request.resource.data.payment_method != 'credit' || can('give_credit'))
             && dayOpen(request.resource.data.business_date));
       // Rule 1: sales are never edited, only cancelled
       allow update: if (isOwner() && unchanged())
@@ -108,12 +114,13 @@ service cloud.firestore {
             && resource.data.status == 'completed'
             && request.resource.data.status == 'cancelled'
             && onlyChanges(['status', 'cancel_reason', 'cancelled_by', 'cancelled_at'])
+            && can('cancel_bills')
             && (isOwner() || dayOpen(resource.data.business_date)));
     }
 
     match /purchases/{id} {
       allow read: if isActive();
-      allow create: if isOwner() || (isActive() && createdByMe());
+      allow create: if isOwner() || (isActive() && createdByMe() && can('record_purchases'));
       allow update: if isOwner() && unchanged();
     }
 
@@ -126,18 +133,26 @@ service cloud.firestore {
       allow update: if isOwner() && unchanged();
     }
 
+    // Each entry type needs its permission: added Udhaar is a positive adjustment, a cancelled credit bill a negative one
     match /customer_ledger/{id} {
       allow read: if isActive();
-      allow create: if isOwner() || (isActive() && createdByMe());
+      allow create: if isOwner()
+        || (isActive() && createdByMe()
+            && ((request.resource.data.type == 'payment' && can('receive_payments'))
+                || (request.resource.data.type == 'credit_sale' && can('give_credit'))
+                || (request.resource.data.type == 'opening' && can('add_customers'))
+                || (request.resource.data.type == 'adjustment' && request.resource.data.amount > 0 && can('add_udhaar'))
+                || (request.resource.data.type == 'adjustment' && request.resource.data.amount < 0 && can('cancel_bills'))));
       allow update: if isOwner() && unchanged();
     }
 
     match /expenses/{id} {
       allow read: if isActive();
       allow create: if isOwner()
-        || (isActive() && createdByMe() && dayOpen(request.resource.data.expense_date));
+        || (isActive() && createdByMe() && can('manage_expenses') && dayOpen(request.resource.data.expense_date));
       allow update: if isOwner()
         || (isActive()
+            && can('manage_expenses')
             && resource.data.created_by == request.auth.uid
             && request.resource.data.created_by == request.auth.uid
             && dayOpen(resource.data.expense_date)
@@ -148,13 +163,13 @@ service cloud.firestore {
     match /daily_closings/{date} {
       allow read: if isActive();
       allow create: if isOwner()
-        || (isActive()
+        || (isActive() && can('daily_closing')
             && request.resource.data.business_date == date
             && request.resource.data.status == 'closed'
             && request.resource.data.closed_by == request.auth.uid);
       // Only the owner can re-open a closed day (audited by the app)
       allow update: if isOwner()
-        || (isActive()
+        || (isActive() && can('daily_closing')
             && resource.data.status == 'open'
             && request.resource.data.status == 'closed'
             && request.resource.data.closed_by == request.auth.uid);

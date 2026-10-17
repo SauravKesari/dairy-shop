@@ -1,5 +1,20 @@
 export type UserRole = 'owner' | 'cashier';
 
+// What a cashier may do; the owner can always do everything. A missing key means allowed,
+// so cashiers created before permissions existed keep working as before.
+export type CashierPermission =
+  | 'give_credit'
+  | 'add_udhaar'
+  | 'receive_payments'
+  | 'add_customers'
+  | 'cancel_bills'
+  | 'manage_expenses'
+  | 'record_purchases'
+  | 'view_reports'
+  | 'daily_closing';
+
+export type CashierPermissions = Partial<Record<CashierPermission, boolean>>;
+
 export interface User {
   id: string;
   name: string;
@@ -8,6 +23,7 @@ export interface User {
   role: UserRole;
   active: boolean;
   created_at: string;
+  permissions?: CashierPermissions;
 }
 
 export interface Settings {

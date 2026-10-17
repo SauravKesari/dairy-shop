@@ -23,6 +23,7 @@ export const ExpensesScreen: React.FC = () => {
     currentBusinessDate,
     currentUser,
     isDateClosed,
+    can,
   } = useDairy();
 
   const [dateFilter, setDateFilter] = useState<string>(currentBusinessDate);
@@ -144,6 +145,7 @@ export const ExpensesScreen: React.FC = () => {
           </p>
         </div>
 
+        {can('manage_expenses') && (
         <button
           type="button"
           onClick={handleOpenAdd}
@@ -152,6 +154,7 @@ export const ExpensesScreen: React.FC = () => {
           <Plus className="w-4 h-4" />
           <span>Add Expense</span>
         </button>
+        )}
       </div>
 
       {/* Summary Cards */}
@@ -267,6 +270,7 @@ export const ExpensesScreen: React.FC = () => {
                   <td className="py-3 px-4 font-sans text-slate-500">{exp.created_by_name}</td>
                   <td className="py-3 px-4 text-center whitespace-nowrap font-sans">
                     <div className="flex items-center justify-center gap-1.5">
+                      {can('manage_expenses') && (
                       <button
                         type="button"
                         onClick={() => handleOpenEdit(exp)}
@@ -275,6 +279,7 @@ export const ExpensesScreen: React.FC = () => {
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
+                      )}
                       {currentUser.role === 'owner' && (
                         <button
                           type="button"

@@ -27,6 +27,8 @@ import {
 } from '../lib/firebase';
 import {
   User,
+  CashierPermission,
+  CashierPermissions,
   Settings,
   Category,
   Product,
@@ -57,6 +59,7 @@ import {
   initialAuditLogs,
 } from '../data/initialData';
 import { LoginScreen, AuthStatus } from '../components/auth/LoginScreen';
+import { can, permissionDenied } from '../lib/permissions';
 
 interface NewSaleItemInput {
   product_id: string;
@@ -156,6 +159,8 @@ interface DairyContextType {
   addUser: (name: string, mobile: string, pin: string, role: 'owner' | 'cashier') => Promise<Result>;
   changeOwnPin: (currentPin: string, newPin: string) => Promise<Result>;
   toggleUserActive: (userId: string) => Promise<Result>;
+  updateUserPermissions: (userId: string, permissions: CashierPermissions) => Promise<Result>;
+  can: (permission: CashierPermission) => boolean;
 }
 
 const DairyContext = createContext<DairyContextType | undefined>(undefined);
@@ -501,6 +506,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
   };
 
   const addCustomer = async (custInput: Omit<Customer, 'id' | 'active' | 'current_dues'>, opening_due = 0) => {
+    if (!can(currentUser, 'add_customers')) return { success: false, error: permissionDenied('add_customers') };
     const [customer, ops] = customerOps(custInput, opening_due);
     const res = await commitOps(ops);
     return res.success ? { ...res, customer } : res;
@@ -533,6 +539,10 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
           error: `Discount of ₹${input.discount} (${discountPercent.toFixed(1)}%) exceeds Cashier limit of ${settings.cashier_max_discount_percent}%. Owner authorization required.`,
         };
       }
+    }
+
+    if (input.payment_method === 'credit' && !can(currentUser, 'give_credit')) {
+      return { success: false, error: permissionDenied('give_credit') };
     }
 
     // Rule 10: Credit sale requires customer
@@ -726,6 +736,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
     if (!reason || reason.trim().length === 0) {
       return { success: false, error: 'A cancellation reason is mandatory.' };
     }
+    if (!can(currentUser, 'cancel_bills')) return { success: false, error: permissionDenied('cancel_bills') };
 
     // Role check: cashier can only cancel on the same day if day is still open
     if (currentUser.role === 'cashier') {
@@ -820,6 +831,9 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
 
   // Purchases - Rule 5: Purchase + purchase items + stock increase are one atomic batch
   const createPurchase = (input: NewPurchaseInput): Promise<Result> => {
+    if (!can(currentUser, 'record_purchases')) {
+      return Promise.resolve({ success: false, error: permissionDenied('record_purchases') });
+    }
     const supplier = suppliers.find(s => s.id === input.supplier_id);
     if (!supplier) return Promise.resolve({ success: false, error: 'Supplier not found' });
     if (!input.items || input.items.length === 0) {
@@ -964,6 +978,9 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
     paymentMethod: 'cash' | 'upi',
     note?: string
   ): Promise<Result> => {
+    if (!can(currentUser, 'receive_payments')) {
+      return Promise.resolve({ success: false, error: permissionDenied('receive_payments') });
+    }
     if (amount <= 0) return Promise.resolve({ success: false, error: 'Payment amount must be greater than zero.' });
     const customer = customers.find(c => c.id === customerId);
     if (!customer) return Promise.resolve({ success: false, error: 'Customer not found.' });
@@ -996,6 +1013,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
 
   // Manual Udhaar: goods or cash given to a customer without a bill
   const addCustomerDues = async (customerId: string, amount: number, note: string): Promise<Result> => {
+    if (!can(currentUser, 'add_udhaar')) return { success: false, error: permissionDenied('add_udhaar') };
     if (!(amount > 0)) return { success: false, error: 'Amount must be greater than zero.' };
     if (!note || note.trim().length === 0) {
       return { success: false, error: 'A note is mandatory (what was given on Udhaar).' };
@@ -1055,6 +1073,9 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
   const addExpense = (
     expenseInput: Omit<Expense, 'id' | 'created_by' | 'created_by_name' | 'created_at'>
   ): Promise<Result> => {
+    if (!can(currentUser, 'manage_expenses')) {
+      return Promise.resolve({ success: false, error: permissionDenied('manage_expenses') });
+    }
     // Check if date is closed
     if (currentUser.role === 'cashier' && isDateClosed(expenseInput.expense_date)) {
       return Promise.resolve({ success: false, error: 'Cannot add expense for a closed day.' });
@@ -1081,6 +1102,9 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
   const updateExpense = (id: string, updates: Partial<Expense>): Promise<Result> => {
     const exp = expenses.find(e => e.id === id);
     if (!exp) return Promise.resolve({ success: false, error: 'Expense not found' });
+    if (!can(currentUser, 'manage_expenses')) {
+      return Promise.resolve({ success: false, error: permissionDenied('manage_expenses') });
+    }
     if (currentUser.role === 'cashier' && exp.expense_date !== currentBusinessDate) {
       return Promise.resolve({ success: false, error: 'Cashier can only edit same-day expenses.' });
     }
@@ -1158,6 +1182,9 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
     actualCash: number,
     note?: string
   ): Promise<Result> => {
+    if (!can(currentUser, 'daily_closing')) {
+      return Promise.resolve({ success: false, error: permissionDenied('daily_closing') });
+    }
     const summary = getDailyCashSummary(date);
     const expected = r2(openingCash + summary.cash_sales + summary.cash_from_dues - summary.cash_expenses);
     const diff = r2(actualCash - expected);
@@ -1521,6 +1548,18 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
     ]);
   };
 
+  const updateUserPermissions = (userId: string, permissions: CashierPermissions): Promise<Result> => {
+    if (currentUser.role !== 'owner') {
+      return Promise.resolve({ success: false, error: 'Only the Owner can change staff permissions.' });
+    }
+    const u = users.find(x => x.id === userId);
+    if (!u) return Promise.resolve({ success: false, error: 'User not found.' });
+    return commitOps([
+      updateOp(doc(db, 'users', userId), { permissions }),
+      auditOp('UPDATE_USER_PERMISSIONS', 'user', userId, { name: u.name, permissions }),
+    ]);
+  };
+
   const signOutUser = () => signOut(auth);
 
   if (!settingsDoc || !usersLoaded || !productsLoaded || !categoriesLoaded || !customersLoaded || !salesLoaded) {
@@ -1583,6 +1622,8 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
         addUser,
         changeOwnPin,
         toggleUserActive,
+        updateUserPermissions,
+        can: (permission: CashierPermission) => can(currentUser, permission),
       }}
     >
       {children}

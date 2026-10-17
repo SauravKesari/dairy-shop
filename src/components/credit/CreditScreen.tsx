@@ -23,6 +23,7 @@ export const CreditScreen: React.FC = () => {
     addCustomerDues,
     addCustomer,
     updateCustomer,
+    can,
   } = useDairy();
 
   // Add Udhaar (manual dues) Modal
@@ -181,6 +182,7 @@ export const CreditScreen: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          {can('add_customers') && (
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
@@ -189,6 +191,8 @@ export const CreditScreen: React.FC = () => {
             <Plus className="w-4 h-4" />
             <span>New Udhaar Customer</span>
           </button>
+          )}
+          {can('add_udhaar') && (
           <button
             type="button"
             onClick={openAddDuesModal}
@@ -197,6 +201,7 @@ export const CreditScreen: React.FC = () => {
             <Plus className="w-4 h-4" />
             <span>Add Udhaar</span>
           </button>
+          )}
         </div>
       </div>
 
@@ -286,6 +291,7 @@ export const CreditScreen: React.FC = () => {
                   <td className="py-3 px-4 text-center whitespace-nowrap">
                     <div className="flex items-center justify-center gap-2">
                       {/* Receive Payment Button */}
+                      {can('receive_payments') && (
                       <button
                         type="button"
                         onClick={() => {
@@ -299,6 +305,7 @@ export const CreditScreen: React.FC = () => {
                         <ArrowDownLeft className="w-3.5 h-3.5" />
                         <span>Receive Payment</span>
                       </button>
+                      )}
 
                       {/* Passbook / Ledger Statement Button */}
                       <button

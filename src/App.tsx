@@ -24,7 +24,7 @@ import { SHOW_DEV_TOOLS } from './lib/firebase';
 
 function AppContent() {
   const [currentTab, setCurrentTab] = useState<NavTab>('pos');
-  const { settings, currentUser } = useDairy();
+  const { settings, currentUser, can } = useDairy();
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900">
@@ -40,7 +40,7 @@ function AppContent() {
         {currentTab === 'credit' && <CreditScreen />}
         {currentTab === 'expenses' && <ExpensesScreen />}
         {currentTab === 'closing' && <DailyClosingScreen />}
-        {currentTab === 'reports' && <ReportsScreen />}
+        {currentTab === 'reports' && can('view_reports') && <ReportsScreen />}
         {currentTab === 'products' && <ProductsCatalogScreen />}
         {currentTab === 'audit' && currentUser.role === 'owner' && <AuditLogScreen />}
         {currentTab === 'audit' && currentUser.role !== 'owner' && (
@@ -49,8 +49,8 @@ function AppContent() {
             <p className="text-xs mt-1">Audit logs are only accessible to the shop Owner.</p>
           </div>
         )}
-        {currentTab === 'settings' && <SettingsScreen />}
-        {currentTab === 'users' && <UsersScreen />}
+        {currentTab === 'settings' && currentUser.role === 'owner' && <SettingsScreen />}
+        {currentTab === 'users' && currentUser.role === 'owner' && <UsersScreen />}
         {SHOW_DEV_TOOLS && currentTab === 'checklist' && <GoLiveChecklist />}
         {SHOW_DEV_TOOLS && currentTab === 'deploy' && <DeployScreen />}
       </main>
