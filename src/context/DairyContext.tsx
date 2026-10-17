@@ -10,6 +10,7 @@ import {
   runTransaction,
   increment,
   arrayUnion,
+  arrayRemove,
   deleteField,
   DocumentReference,
   DocumentData,
@@ -108,6 +109,9 @@ interface DairyContextType {
   categories: Category[];
   addCategory: (name: string) => Promise<Result & { category?: Category }>;
   addCustomUnit: (unit: string) => Promise<Result>;
+  updateCategory: (id: string, updates: Partial<Pick<Category, 'name' | 'active'>>) => Promise<Result>;
+  renameCustomUnit: (oldUnit: string, newUnit: string) => Promise<Result & { productsUpdated?: number }>;
+  removeCustomUnit: (unit: string) => Promise<Result>;
   products: Product[];
   addProduct: (product: Omit<Product, 'id' | 'current_stock' | 'created_at' | 'updated_at'>, opening_stock?: number) => Promise<Result>;
   updateProduct: (id: string, updates: Partial<Product>) => Promise<Result>;
@@ -451,6 +455,79 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
     return commitOps([
       b => b.set(doc(db, 'settings', 'shop'), { custom_units: arrayUnion(trimmed) }, { merge: true }),
       auditOp('ADD_CUSTOM_UNIT', 'settings', 'global', { unit: trimmed }),
+    ]);
+  };
+
+  // Products point at the category id, so a rename shows everywhere at once. Categories are hidden, never deleted.
+  const updateCategory = (id: string, updates: Partial<Pick<Category, 'name' | 'active'>>): Promise<Result> => {
+    if (currentUser.role !== 'owner') {
+      return Promise.resolve({ success: false, error: 'Only the Owner can edit categories.' });
+    }
+    const cat = categories.find(c => c.id === id);
+    if (!cat) return Promise.resolve({ success: false, error: 'Category not found.' });
+
+    const changes: Partial<Category> = {};
+    if (updates.name !== undefined) {
+      const trimmed = updates.name.trim();
+      if (!trimmed) return Promise.resolve({ success: false, error: 'Category name is required.' });
+      if (categories.some(c => c.id !== id && c.name.toLowerCase() === trimmed.toLowerCase())) {
+        return Promise.resolve({ success: false, error: `Category "${trimmed}" already exists.` });
+      }
+      changes.name = trimmed;
+    }
+    if (updates.active !== undefined) changes.active = updates.active;
+
+    return commitOps([
+      updateOp(doc(db, 'categories', id), changes),
+      auditOp('UPDATE_CATEGORY', 'category', id, { old_name: cat.name, ...changes }),
+    ]);
+  };
+
+  // Products store the unit as text, so a rename rewrites every product using it. Past bills keep the old text.
+  const renameCustomUnit = async (
+    oldUnit: string,
+    newUnit: string
+  ): Promise<Result & { productsUpdated?: number }> => {
+    if (currentUser.role !== 'owner') return { success: false, error: 'Only the Owner can edit units.' };
+    const customUnits = settings.custom_units || [];
+    if (!customUnits.includes(oldUnit)) return { success: false, error: 'Only custom units can be renamed.' };
+    const trimmed = newUnit.trim();
+    if (!trimmed) return { success: false, error: 'Unit name is required.' };
+    if (trimmed.length > 12) return { success: false, error: 'Keep the unit short (12 characters max).' };
+    if (trimmed === oldUnit) return { success: true, productsUpdated: 0 };
+    if (allUnits(settings).some(u => u !== oldUnit && u.toLowerCase() === trimmed.toLowerCase())) {
+      return { success: false, error: `Unit "${trimmed}" already exists.` };
+    }
+    if (!navigator.onLine) return { success: false, error: 'No internet connection. Rename the unit once online.' };
+
+    const affected = products.filter(p => p.unit === oldUnit);
+    const nowIso = new Date().toISOString();
+    const res = await commitOps([
+      b => b.set(doc(db, 'settings', 'shop'), { custom_units: customUnits.map(u => (u === oldUnit ? trimmed : u)) }, { merge: true }),
+      ...affected.map(p => updateOp(doc(db, 'products', p.id), { unit: trimmed, updated_at: nowIso })),
+      auditOp('RENAME_CUSTOM_UNIT', 'settings', 'global', { old_unit: oldUnit, new_unit: trimmed, products_updated: affected.length }),
+    ]);
+    return res.success ? { ...res, productsUpdated: affected.length } : res;
+  };
+
+  const removeCustomUnit = (unit: string): Promise<Result> => {
+    if (currentUser.role !== 'owner') {
+      return Promise.resolve({ success: false, error: 'Only the Owner can remove units.' });
+    }
+    if (!(settings.custom_units || []).includes(unit)) {
+      return Promise.resolve({ success: false, error: 'Built-in units cannot be removed.' });
+    }
+    const inUse = products.filter(p => p.unit === unit);
+    if (inUse.length > 0) {
+      const names = inUse.slice(0, 3).map(p => p.name).join(', ');
+      return Promise.resolve({
+        success: false,
+        error: `"${unit}" is used by ${inUse.length} product(s): ${names}${inUse.length > 3 ? '…' : ''}. Change their unit first.`,
+      });
+    }
+    return commitOps([
+      b => b.set(doc(db, 'settings', 'shop'), { custom_units: arrayRemove(unit) }, { merge: true }),
+      auditOp('REMOVE_CUSTOM_UNIT', 'settings', 'global', { unit }),
     ]);
   };
 
@@ -1609,6 +1686,9 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
         categories,
         addCategory,
         addCustomUnit,
+        updateCategory,
+        renameCustomUnit,
+        removeCustomUnit,
         products,
         addProduct,
         updateProduct,

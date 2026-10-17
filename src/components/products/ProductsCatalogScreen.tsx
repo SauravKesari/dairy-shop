@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useDairy } from '../../context/DairyContext';
 import { Product, ProductUnit } from '../../types';
-import { Plus, Search, Upload, FileDown, Edit3, Power, Check, AlertCircle } from 'lucide-react';
+import { Plus, Search, Upload, FileDown, Edit3, Power, Check, AlertCircle, Tags } from 'lucide-react';
+import { CategoriesUnitsScreen } from './CategoriesUnitsScreen';
 import { allUnits, unitLabel } from '../../lib/units';
 
 export const ProductsCatalogScreen: React.FC = () => {
@@ -23,6 +24,9 @@ export const ProductsCatalogScreen: React.FC = () => {
   const [newCategoryName, setNewCategoryName] = useState<string | null>(null);
   const [newUnitName, setNewUnitName] = useState<string | null>(null);
   const [isAddingOption, setIsAddingOption] = useState(false);
+
+  // Categories & Units manager opened from this screen (the More menu has the same screen)
+  const [showCatalogSetup, setShowCatalogSetup] = useState(false);
 
   const handleAddCategory = async () => {
     if (newCategoryName === null || isAddingOption) return;
@@ -92,10 +96,12 @@ export const ProductsCatalogScreen: React.FC = () => {
     });
   }, [products, selectedCat, searchQuery]);
 
+  const formCategories = categories.filter(c => c.active !== false || c.id === categoryId);
+
   const handleOpenAdd = () => {
     setEditingProd(null);
     setName('');
-    setCategoryId(categories[0]?.id || '');
+    setCategoryId(categories.find(c => c.active !== false)?.id || '');
     setSku(`SKU-${Date.now().toString().slice(-4)}`);
     setBarcode('');
     setUnit('pkt');
@@ -252,6 +258,17 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
             >
               <Upload className="w-3.5 h-3.5" />
               <span>CSV Bulk Import</span>
+            </button>
+          )}
+
+          {currentUser.role === 'owner' && (
+            <button
+              type="button"
+              onClick={() => setShowCatalogSetup(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-semibold rounded-lg shadow-2xs transition-colors"
+            >
+              <Tags className="w-4 h-4" />
+              <span>Categories & Units</span>
             </button>
           )}
 
@@ -433,8 +450,8 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                       onChange={e => setCategoryId(e.target.value)}
                       className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
                     >
-                      {categories.length === 0 && <option value="">Add a category first</option>}
-                      {categories.map(c => (
+                      {formCategories.length === 0 && <option value="">Add a category first</option>}
+                      {formCategories.map(c => (
                         <option key={c.id} value={c.id}>
                           {c.name}
                         </option>
@@ -771,6 +788,23 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                 Parse & Import Data
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Categories & Units Manager */}
+      {showCatalogSetup && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-slate-100 rounded-xl shadow-2xl max-w-5xl w-full relative">
+            <button
+              type="button"
+              onClick={() => setShowCatalogSetup(false)}
+              className="absolute top-3 right-4 text-slate-400 hover:text-slate-700 text-2xl font-bold"
+              title="Close"
+            >
+              &times;
+            </button>
+            <CategoriesUnitsScreen />
           </div>
         </div>
       )}
