@@ -3,6 +3,7 @@ import { useDairy } from '../../context/DairyContext';
 import { Users, Plus, Key, Power, ShieldCheck, UserCheck, SlidersHorizontal } from 'lucide-react';
 import { CashierPermissions, User } from '../../types';
 import { can, PERMISSION_LABELS } from '../../lib/permissions';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 export const UsersScreen: React.FC = () => {
   const {
@@ -13,6 +14,7 @@ export const UsersScreen: React.FC = () => {
     toggleUserActive,
     updateUserPermissions,
   } = useDairy();
+  const { t, tx } = useLanguage();
 
   // Per-cashier permissions modal (owner only)
   const [permUser, setPermUser] = useState<User | null>(null);
@@ -32,7 +34,7 @@ export const UsersScreen: React.FC = () => {
     const res = await updateUserPermissions(permUser.id, permDraft);
     setSaving(false);
     if (!res.success) {
-      setFormError(res.error || 'Failed to save permissions');
+      setFormError(res.error || t('users.err.savePermissions'));
       return;
     }
     setPermUser(null);
@@ -59,7 +61,7 @@ export const UsersScreen: React.FC = () => {
     const res = await addUser(name.trim(), mobile.trim(), pin.trim(), role);
     setSaving(false);
     if (!res.success) {
-      setFormError(res.error || 'Failed to add user');
+      setFormError(res.error || t('users.err.addUser'));
       return;
     }
     setShowAddModal(false);
@@ -76,7 +78,7 @@ export const UsersScreen: React.FC = () => {
     const res = await changeOwnPin(currentPin.trim(), newPin.trim());
     setSaving(false);
     if (!res.success) {
-      setFormError(res.error || 'Failed to change PIN');
+      setFormError(res.error || t('users.err.changePin'));
       return;
     }
     setPinUserId(null);
@@ -98,10 +100,10 @@ export const UsersScreen: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900">
-            Cashiers & User Permissions
+            {t('users.title')}
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Manage owner and cashier counter accounts, security PINs, and active status
+            {t('users.subtitle')}
           </p>
         </div>
 
@@ -112,7 +114,7 @@ export const UsersScreen: React.FC = () => {
             className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors self-start sm:self-auto"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Cashier Staff</span>
+            <span>{t('users.addStaff')}</span>
           </button>
         )}
       </div>
@@ -122,11 +124,11 @@ export const UsersScreen: React.FC = () => {
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-              <th className="py-3 px-4 font-semibold">Staff Name</th>
-              <th className="py-3 px-4 font-semibold">Mobile Login</th>
-              <th className="py-3 px-4 font-semibold">Role</th>
-              <th className="py-3 px-4 text-center font-semibold">Status</th>
-              <th className="py-3 px-4 text-center font-semibold">Actions</th>
+              <th className="py-3 px-4 font-semibold">{t('users.col.name')}</th>
+              <th className="py-3 px-4 font-semibold">{t('users.col.mobile')}</th>
+              <th className="py-3 px-4 font-semibold">{t('users.col.role')}</th>
+              <th className="py-3 px-4 text-center font-semibold">{t('common.status')}</th>
+              <th className="py-3 px-4 text-center font-semibold">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -136,7 +138,7 @@ export const UsersScreen: React.FC = () => {
                   {u.name}
                   {u.id === currentUser.id && (
                     <span className="ml-2 text-[10px] bg-slate-900 text-white px-1.5 py-0.5 rounded font-normal">
-                      Current User
+                      {t('users.currentUser')}
                     </span>
                   )}
                 </td>
@@ -149,7 +151,7 @@ export const UsersScreen: React.FC = () => {
                         : 'bg-blue-50 text-blue-700'
                     }`}
                   >
-                    {u.role}
+                    {tx(`role.${u.role}`, u.role)}
                   </span>
                 </td>
                 <td className="py-3 px-4 text-center">
@@ -158,7 +160,7 @@ export const UsersScreen: React.FC = () => {
                       u.active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
                     }`}
                   >
-                    {u.active ? 'Active' : 'Disabled'}
+                    {u.active ? t('common.active') : t('users.disabled')}
                   </span>
                 </td>
                 <td className="py-3 px-4 text-center">
@@ -174,14 +176,14 @@ export const UsersScreen: React.FC = () => {
                             setFormError(null);
                           }}
                           className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded"
-                          title="Change my PIN"
+                          title={t('users.changeMyPin')}
                         >
                           <Key className="w-3.5 h-3.5" />
                         </button>
                       ) : (
                         <span
                           className="p-1 text-slate-300 cursor-help"
-                          title="To reset this PIN: Firebase console → Authentication → delete this login, then add the staff member again here"
+                          title={t('users.resetPinHint')}
                         >
                           <Key className="w-3.5 h-3.5" />
                         </span>
@@ -192,10 +194,10 @@ export const UsersScreen: React.FC = () => {
                           type="button"
                           onClick={() => openPermissions(u)}
                           className="p-1 text-slate-500 hover:text-blue-700 hover:bg-slate-100 rounded flex items-center gap-1"
-                          title="What this cashier is allowed to do"
+                          title={t('users.permissionsTitle')}
                         >
                           <SlidersHorizontal className="w-3.5 h-3.5" />
-                          <span className="text-[11px] font-medium">Permissions</span>
+                          <span className="text-[11px] font-medium">{t('users.permissions')}</span>
                         </button>
                       )}
 
@@ -204,7 +206,7 @@ export const UsersScreen: React.FC = () => {
                           type="button"
                           onClick={() => handleToggleActive(u.id)}
                           className="p-1 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded"
-                          title="Toggle Active Status"
+                          title={t('users.toggleActive')}
                         >
                           <Power className="w-3.5 h-3.5" />
                         </button>
@@ -223,9 +225,9 @@ export const UsersScreen: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 space-y-3 text-xs">
             <div>
-              <h3 className="font-bold text-slate-900 text-base">Permissions — {permUser.name}</h3>
+              <h3 className="font-bold text-slate-900 text-base">{t('users.perm.heading', { name: permUser.name })}</h3>
               <p className="text-slate-500 mt-0.5">
-                Billing (cash / UPI / card) is always allowed. Untick anything this cashier should not do.
+                {t('users.perm.intro')}
               </p>
             </div>
             {errorBox}
@@ -239,8 +241,8 @@ export const UsersScreen: React.FC = () => {
                     onChange={e => setPermDraft(d => ({ ...d, [p.key]: e.target.checked }))}
                   />
                   <span>
-                    <span className="font-semibold text-slate-800 block">{p.label}</span>
-                    <span className="text-slate-500">{p.hint}</span>
+                    <span className="font-semibold text-slate-800 block">{tx(`perm.${p.key}`, p.label)}</span>
+                    <span className="text-slate-500">{tx(`perm.${p.key}.hint`, p.hint)}</span>
                   </span>
                 </label>
               ))}
@@ -251,7 +253,7 @@ export const UsersScreen: React.FC = () => {
                 onClick={() => setPermUser(null)}
                 className="px-3 py-1.5 text-slate-600 hover:text-slate-900"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -259,7 +261,7 @@ export const UsersScreen: React.FC = () => {
                 onClick={handleSavePermissions}
                 className="px-4 py-1.5 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 disabled:opacity-60"
               >
-                {saving ? 'Saving…' : 'Save Permissions'}
+                {saving ? t('users.saving') : t('users.perm.save')}
               </button>
             </div>
           </div>
@@ -270,21 +272,21 @@ export const UsersScreen: React.FC = () => {
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5 space-y-3">
-            <h3 className="font-bold text-slate-900 text-base">Add Counter Staff</h3>
+            <h3 className="font-bold text-slate-900 text-base">{t('users.add.heading')}</h3>
             <form onSubmit={handleCreateUser} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Staff Name *</label>
+                <label className="block text-slate-700 font-semibold mb-1">{t('users.add.name')}</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Suresh Yadav"
+                  placeholder={t('users.add.namePlaceholder')}
                   value={name}
                   onChange={e => setName(e.target.value)}
                   className="w-full p-2 border border-slate-200 rounded-lg"
                 />
               </div>
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Mobile Login *</label>
+                <label className="block text-slate-700 font-semibold mb-1">{t('users.add.mobile')}</label>
                 <input
                   type="tel"
                   required
@@ -295,7 +297,7 @@ export const UsersScreen: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Counter PIN (at least 6 digits) *</label>
+                <label className="block text-slate-700 font-semibold mb-1">{t('users.add.pin')}</label>
                 <input
                   type="password"
                   required
@@ -308,14 +310,14 @@ export const UsersScreen: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Role Permission *</label>
+                <label className="block text-slate-700 font-semibold mb-1">{t('users.add.role')}</label>
                 <select
                   value={role}
                   onChange={e => setRole(e.target.value as any)}
                   className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
                 >
-                  <option value="cashier">Cashier (Billing, View Stock, View Bills)</option>
-                  <option value="owner">Owner (Everything & Admin)</option>
+                  <option value="cashier">{t('users.add.roleCashier')}</option>
+                  <option value="owner">{t('users.add.roleOwner')}</option>
                 </select>
               </div>
 
@@ -329,14 +331,14 @@ export const UsersScreen: React.FC = () => {
                   }}
                   className="px-3 py-1.5 text-slate-600 hover:text-slate-900"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
                   className="px-4 py-1.5 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800 disabled:opacity-60"
                 >
-                  {saving ? 'Saving…' : 'Save User'}
+                  {saving ? t('users.saving') : t('users.add.save')}
                 </button>
               </div>
             </form>
@@ -348,10 +350,10 @@ export const UsersScreen: React.FC = () => {
       {pinUserId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-xs w-full p-5 space-y-3">
-            <h4 className="font-bold text-slate-900 text-sm">Change My PIN</h4>
+            <h4 className="font-bold text-slate-900 text-sm">{t('users.pin.heading')}</h4>
             <form onSubmit={handleChangePin} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Current PIN *</label>
+                <label className="block text-slate-700 font-semibold mb-1">{t('users.pin.current')}</label>
                 <input
                   type="password"
                   required
@@ -362,7 +364,7 @@ export const UsersScreen: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">New PIN (at least 6 digits) *</label>
+                <label className="block text-slate-700 font-semibold mb-1">{t('users.pin.new')}</label>
                 <input
                   type="password"
                   required
@@ -380,14 +382,14 @@ export const UsersScreen: React.FC = () => {
                   onClick={() => setPinUserId(null)}
                   className="px-3 py-1 text-slate-600 hover:text-slate-900"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
                   className="px-4 py-1 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800 disabled:opacity-60"
                 >
-                  {saving ? 'Saving…' : 'Update PIN'}
+                  {saving ? t('users.saving') : t('users.pin.update')}
                 </button>
               </div>
             </form>

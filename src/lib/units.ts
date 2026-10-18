@@ -1,4 +1,5 @@
 import { Settings } from '../types';
+import { translate, translateDynamic } from '../i18n';
 
 // Built-in units; the owner can add more, which are stored in settings.custom_units
 export const DEFAULT_UNITS: { unit: string; label: string }[] = [
@@ -36,4 +37,4 @@ export const parseQty = (raw: string, unit: string) => {
 export const isValidQtyForUnit = (qty: number, unit: string) => isLooseUnit(unit) || Number.isInteger(qty);
 
 export const wholeQtyError = (name: string, unit: string, qty: number) =>
-  `${name} is sold in whole ${unit}s; ${qty} is not allowed. Enter a whole number.`;
+  translate('err.wholeQty', { name, unit: translateDynamic(`unit.${unit}`, unit), qty });

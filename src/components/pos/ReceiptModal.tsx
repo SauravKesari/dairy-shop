@@ -4,6 +4,8 @@ import QRCode from 'qrcode';
 import { Sale } from '../../types';
 import { useDairy } from '../../context/DairyContext';
 import { buildUpiUrl } from '../../lib/upi';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { useProductName } from '../../i18n/useProductName';
 import { Printer, Share2, X, Check, Copy } from 'lucide-react';
 
 interface ReceiptModalProps {
@@ -13,6 +15,8 @@ interface ReceiptModalProps {
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => {
   const { settings, customers } = useDairy();
+  const { t, tx } = useLanguage();
+  const { nameOf, unitOf } = useProductName();
   const [paperFormat, setPaperFormat] = useState<'80mm' | '58mm' | 'A4'>('80mm');
   const [copied, setCopied] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -50,22 +54,25 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
     window.print();
   };
 
+  const paymentLabel = tx(`payment.${sale.payment_method}`, sale.payment_method);
+
   const handleCopyText = () => {
+    const time = new Date(sale.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const text = `*${settings.shop_name}*
 ${settings.address}
-Ph: ${settings.phone}
+${t('receipt.share.phone', { phone: settings.phone })}
 --------------------------------
-Invoice: ${sale.invoice_no}
-Date: ${sale.business_date} ${new Date(sale.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-Cashier: ${sale.created_by_name}
-Customer: ${sale.customer_name || 'Retail'}
+${t('receipt.share.invoice', { no: sale.invoice_no })}
+${t('receipt.share.date', { date: `${sale.business_date} ${time}` })}
+${t('receipt.share.cashier', { name: sale.created_by_name })}
+${t('receipt.share.customer', { name: sale.customer_name || t('receipt.share.retail') })}
 --------------------------------
-${sale.items.map(it => `${it.product_name}\n  ${it.qty} ${it.unit} x ₹${it.unit_price} = ₹${it.line_total.toFixed(2)}`).join('\n')}
+${sale.items.map(it => `${nameOf(it.product_id, it.product_name)}\n  ${it.qty} ${unitOf(it.unit)} x ₹${it.unit_price} = ₹${it.line_total.toFixed(2)}`).join('\n')}
 --------------------------------
-Subtotal: ₹${sale.subtotal.toFixed(2)}
-${sale.discount > 0 ? `Discount: -₹${sale.discount.toFixed(2)}\n` : ''}${settings.gst_enabled && sale.tax > 0 ? `GST: ₹${sale.tax.toFixed(2)}\n` : ''}*TOTAL AMOUNT: ₹${sale.total.toFixed(2)}*
-Payment: ${sale.payment_method.toUpperCase()}
-${customer ? `Current Dues: ₹${customer.current_dues.toFixed(2)}\n` : ''}
+${t('receipt.share.subtotal', { amount: sale.subtotal.toFixed(2) })}
+${sale.discount > 0 ? `${t('receipt.share.discount', { amount: sale.discount.toFixed(2) })}\n` : ''}${settings.gst_enabled && sale.tax > 0 ? `${t('receipt.share.gst', { amount: sale.tax.toFixed(2) })}\n` : ''}*${t('receipt.share.total', { amount: sale.total.toFixed(2) })}*
+${t('receipt.share.payment', { mode: paymentLabel.toUpperCase() })}
+${customer ? `${t('receipt.share.dues', { amount: customer.current_dues.toFixed(2) })}\n` : ''}
 ${settings.receipt_footer}`;
 
     navigator.clipboard.writeText(text);
@@ -80,7 +87,7 @@ ${settings.receipt_footer}`;
         {/* Modal Controls Header (no-print) */}
         <div className="no-print flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
           <div>
-            <h3 className="text-base font-bold text-slate-900">Sale Receipt</h3>
+            <h3 className="text-base font-bold text-slate-900">{t('receipt.title')}</h3>
             <p className="text-xs text-slate-500 font-mono-numbers">{sale.invoice_no}</p>
           </div>
 
@@ -141,7 +148,7 @@ ${settings.receipt_footer}`;
             <div className="text-center pb-3 border-b border-dashed border-slate-300">
               <h2 className="font-extrabold text-base tracking-tight uppercase">{settings.shop_name}</h2>
               <p className="text-slate-600 text-[11px] leading-tight mt-0.5">{settings.address}</p>
-              <p className="text-slate-600 text-[11px]">Phone: {settings.phone}</p>
+              <p className="text-slate-600 text-[11px]">{t('receipt.phone', { phone: settings.phone })}</p>
               {settings.gst_enabled && (
                 <p className="text-slate-600 text-[11px]">GSTIN: 24AAACG8899K1Z4</p>
               )}
@@ -150,11 +157,11 @@ ${settings.receipt_footer}`;
             {/* Invoice Meta */}
             <div className="py-2.5 border-b border-dashed border-slate-300 text-[11px] space-y-1">
               <div className="flex justify-between">
-                <span className="text-slate-500">Invoice:</span>
+                <span className="text-slate-500">{t('receipt.invoice')}</span>
                 <span className="font-bold font-mono-numbers">{sale.invoice_no}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Date & Time:</span>
+                <span className="text-slate-500">{t('receipt.dateTime')}</span>
                 <span className="font-mono-numbers">
                   {sale.business_date}{' '}
                   {new Date(sale.created_at).toLocaleTimeString([], {
@@ -164,12 +171,12 @@ ${settings.receipt_footer}`;
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Billed by:</span>
+                <span className="text-slate-500">{t('receipt.billedBy')}</span>
                 <span>{sale.created_by_name}</span>
               </div>
               {sale.customer_name && (
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Customer:</span>
+                  <span className="text-slate-500">{t('receipt.customer')}</span>
                   <span className="font-medium text-slate-800">
                     {sale.customer_name} {sale.customer_mobile ? `(${sale.customer_mobile})` : ''}
                   </span>
@@ -177,13 +184,14 @@ ${settings.receipt_footer}`;
               )}
               {sale.is_offline_entry && (
                 <div className="text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded text-[10px] inline-block font-medium">
-                  Offline Bill Entry {sale.offline_bill_ref ? `(Book ref: ${sale.offline_bill_ref})` : ''}
+                  {t('receipt.offlineEntry')}{' '}
+                  {sale.offline_bill_ref ? t('receipt.bookRef', { ref: sale.offline_bill_ref }) : ''}
                 </div>
               )}
               {sale.status === 'cancelled' && (
                 <div className="text-red-700 bg-red-50 px-2 py-1 rounded text-xs font-bold text-center border border-red-200">
-                  *** CANCELLED BILL ***
-                  {sale.cancel_reason && <div className="text-[10px] font-normal font-sans">Reason: {sale.cancel_reason}</div>}
+                  {t('receipt.cancelledBill')}
+                  {sale.cancel_reason && <div className="text-[10px] font-normal font-sans">{t('receipt.reason', { reason: sale.cancel_reason })}</div>}
                 </div>
               )}
             </div>
@@ -193,20 +201,20 @@ ${settings.receipt_footer}`;
               <table className="w-full text-left">
                 <thead>
                   <tr className="text-slate-500 text-[10px] border-b border-slate-200 pb-1">
-                    <th className="py-1 font-medium">Item</th>
-                    <th className="py-1 text-center font-medium">Qty</th>
-                    <th className="py-1 text-right font-medium">Rate</th>
-                    <th className="py-1 text-right font-medium">Amount</th>
+                    <th className="py-1 font-medium">{t('receipt.item')}</th>
+                    <th className="py-1 text-center font-medium">{t('receipt.qty')}</th>
+                    <th className="py-1 text-right font-medium">{t('receipt.rate')}</th>
+                    <th className="py-1 text-right font-medium">{t('receipt.amount')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {sale.items.map((it, idx) => (
                     <tr key={idx} className="text-[11px]">
                       <td className="py-1.5 pr-1 font-medium text-slate-800 leading-tight">
-                        {it.product_name}
+                        {nameOf(it.product_id, it.product_name)}
                       </td>
                       <td className="py-1.5 text-center font-mono-numbers whitespace-nowrap text-slate-600">
-                        {it.qty} {it.unit}
+                        {it.qty} {unitOf(it.unit)}
                       </td>
                       <td className="py-1.5 text-right font-mono-numbers text-slate-600">
                         ₹{it.unit_price.toFixed(2)}
@@ -223,29 +231,29 @@ ${settings.receipt_footer}`;
             {/* Totals Section */}
             <div className="py-2.5 border-b border-dashed border-slate-300 text-[11px] space-y-1 font-mono-numbers">
               <div className="flex justify-between text-slate-600">
-                <span>Subtotal</span>
+                <span>{t('receipt.subtotal')}</span>
                 <span>₹{sale.subtotal.toFixed(2)}</span>
               </div>
               {sale.discount > 0 && (
                 <div className="flex justify-between text-emerald-600 font-medium">
-                  <span>Discount</span>
+                  <span>{t('receipt.discount')}</span>
                   <span>-₹{sale.discount.toFixed(2)}</span>
                 </div>
               )}
               {settings.gst_enabled && sale.tax > 0 && (
                 <div className="flex justify-between text-slate-600">
-                  <span>GST Total</span>
+                  <span>{t('receipt.gstTotal')}</span>
                   <span>₹{sale.tax.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between items-center text-sm font-extrabold text-slate-900 pt-1 border-t border-slate-200">
-                <span>TOTAL PAYABLE</span>
+                <span>{t('receipt.totalPayable')}</span>
                 <span>₹{sale.total.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-slate-700 pt-0.5">
-                <span className="font-sans text-[10px] uppercase text-slate-500">Payment Mode:</span>
+                <span className="font-sans text-[10px] uppercase text-slate-500">{t('receipt.paymentMode')}</span>
                 <span className="font-bold uppercase text-[11px] bg-slate-100 px-1.5 py-0.5 rounded">
-                  {sale.payment_method === 'credit' ? 'Udhaar (Credit)' : sale.payment_method}
+                  {sale.payment_method === 'credit' ? t('receipt.creditFull') : paymentLabel}
                 </span>
               </div>
             </div>
@@ -254,12 +262,12 @@ ${settings.receipt_footer}`;
             {customer && (
               <div className="py-2 border-b border-dashed border-slate-300 text-[11px] bg-amber-50/50 p-2 rounded my-1.5">
                 <div className="flex justify-between text-amber-900">
-                  <span>Total Udhaar Dues:</span>
+                  <span>{t('receipt.totalDues')}</span>
                   <span className="font-bold font-mono-numbers">₹{customer.current_dues.toFixed(2)}</span>
                 </div>
                 {customer.credit_limit && (
                   <div className="flex justify-between text-[10px] text-amber-700 mt-0.5">
-                    <span>Credit Limit:</span>
+                    <span>{t('receipt.creditLimit')}</span>
                     <span>₹{customer.credit_limit.toFixed(2)}</span>
                   </div>
                 )}
@@ -269,7 +277,7 @@ ${settings.receipt_footer}`;
             {/* Shop UPI QR Code */}
             {settings.upi_id && sale.total > 0 && sale.status !== 'cancelled' && (
               <div className="py-3 text-center flex flex-col items-center justify-center border-b border-dashed border-slate-300">
-                <p className="text-[10px] text-slate-500 mb-1">Scan & Pay via any UPI App</p>
+                <p className="text-[10px] text-slate-500 mb-1">{t('receipt.scanPay')}</p>
                 <div className="p-1.5 bg-white border border-slate-200 rounded inline-block shadow-2xs">
                   <canvas ref={canvasRef} />
                 </div>
@@ -280,7 +288,7 @@ ${settings.receipt_footer}`;
             {/* Footer Message */}
             <div className="text-center pt-3 text-[10px] text-slate-500 leading-tight">
               <p className="font-medium text-slate-700">{settings.receipt_footer}</p>
-              <p className="mt-1">Computer Generated Receipt</p>
+              <p className="mt-1">{t('receipt.computerGenerated')}</p>
             </div>
           </div>
         </div>
@@ -293,7 +301,7 @@ ${settings.receipt_footer}`;
             className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
           >
             {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-            <span>{copied ? 'Copied Receipt Text' : 'Copy Text (WhatsApp)'}</span>
+            <span>{copied ? t('receipt.copied') : t('receipt.copyText')}</span>
           </button>
 
           <div className="flex items-center gap-2">
@@ -302,7 +310,7 @@ ${settings.receipt_footer}`;
               onClick={onClose}
               className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors"
             >
-              Done
+              {t('receipt.done')}
             </button>
             <button
               type="button"
@@ -310,7 +318,7 @@ ${settings.receipt_footer}`;
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow-sm transition-colors"
             >
               <Printer className="w-4 h-4" />
-              <span>Print Receipt</span>
+              <span>{t('receipt.printReceipt')}</span>
             </button>
           </div>
         </div>

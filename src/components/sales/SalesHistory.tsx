@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useDairy } from '../../context/DairyContext';
 import { Sale } from '../../types';
 import { ReceiptModal } from '../pos/ReceiptModal';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { useProductName } from '../../i18n/useProductName';
 import {
   Search,
   Filter,
@@ -16,6 +18,8 @@ import {
 
 export const SalesHistory: React.FC = () => {
   const { sales, currentUser, currentBusinessDate, cancelSale, isDateClosed, can } = useDairy();
+  const { t, tx } = useLanguage();
+  const { nameOf } = useProductName();
 
   const [dateFilter, setDateFilter] = useState<string>(currentBusinessDate);
   const [cashierFilter, setCashierFilter] = useState<string>('all');
@@ -55,7 +59,7 @@ export const SalesHistory: React.FC = () => {
 
     const res = await cancelSale(cancellingSale.id, cancelReason);
     if (!res.success) {
-      setCancelError(res.error || 'Failed to cancel sale');
+      setCancelError(res.error || t('sales.err.cancelFailed'));
       return;
     }
 
@@ -77,16 +81,16 @@ export const SalesHistory: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900">
-            Sales & Billing History
+            {t('sales.title')}
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Browse and review issued invoices, reprint thermal bills, or initiate audited cancellations
+            {t('sales.subtitle')}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs">
-            <span className="text-slate-500">Filtered Net Sales:</span>{' '}
+            <span className="text-slate-500">{t('sales.filteredNet')}</span>{' '}
             <span className="font-extrabold font-mono-numbers text-slate-900 text-sm">
               ₹{totalSalesAmount.toFixed(2)}
             </span>
@@ -99,7 +103,7 @@ export const SalesHistory: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 text-xs">
           {/* Date Picker */}
           <div>
-            <label className="block text-slate-500 mb-1 font-medium">Business Date</label>
+            <label className="block text-slate-500 mb-1 font-medium">{t('sales.businessDate')}</label>
             <div className="relative">
               <input
                 type="date"
@@ -113,7 +117,7 @@ export const SalesHistory: React.FC = () => {
 
           {/* Search by Invoice / Customer */}
           <div>
-            <label className="block text-slate-500 mb-1 font-medium">Search Bill / Customer</label>
+            <label className="block text-slate-500 mb-1 font-medium">{t('sales.searchLabel')}</label>
             <div className="relative">
               <input
                 type="text"
@@ -128,29 +132,29 @@ export const SalesHistory: React.FC = () => {
 
           {/* Payment Method Filter */}
           <div>
-            <label className="block text-slate-500 mb-1 font-medium">Payment Mode</label>
+            <label className="block text-slate-500 mb-1 font-medium">{t('sales.paymentMode')}</label>
             <select
               value={paymentFilter}
               onChange={e => setPaymentFilter(e.target.value)}
               className="w-full py-1.5 px-2 border border-slate-200 rounded-lg bg-slate-50"
             >
-              <option value="all">All Modes</option>
-              <option value="cash">Cash</option>
-              <option value="upi">UPI / QR</option>
-              <option value="card">Card</option>
-              <option value="credit">Udhaar (Credit)</option>
+              <option value="all">{t('sales.allModes')}</option>
+              <option value="cash">{t('payment.cash')}</option>
+              <option value="upi">{t('sales.upiQr')}</option>
+              <option value="card">{t('payment.card')}</option>
+              <option value="credit">{t('sales.creditFull')}</option>
             </select>
           </div>
 
           {/* Cashier Filter */}
           <div>
-            <label className="block text-slate-500 mb-1 font-medium">Billed By</label>
+            <label className="block text-slate-500 mb-1 font-medium">{t('sales.billedBy')}</label>
             <select
               value={cashierFilter}
               onChange={e => setCashierFilter(e.target.value)}
               className="w-full py-1.5 px-2 border border-slate-200 rounded-lg bg-slate-50"
             >
-              <option value="all">All Staff</option>
+              <option value="all">{t('sales.allStaff')}</option>
               {cashiersList.map(([id, name]) => (
                 <option key={id} value={id}>
                   {name}
@@ -161,15 +165,15 @@ export const SalesHistory: React.FC = () => {
 
           {/* Status Filter */}
           <div>
-            <label className="block text-slate-500 mb-1 font-medium">Bill Status</label>
+            <label className="block text-slate-500 mb-1 font-medium">{t('sales.billStatus')}</label>
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
               className="w-full py-1.5 px-2 border border-slate-200 rounded-lg bg-slate-50"
             >
-              <option value="all">All (Active & Cancelled)</option>
-              <option value="completed">Completed Only</option>
-              <option value="cancelled">Cancelled Only</option>
+              <option value="all">{t('sales.allStatus')}</option>
+              <option value="completed">{t('sales.completedOnly')}</option>
+              <option value="cancelled">{t('sales.cancelledOnly')}</option>
             </select>
           </div>
         </div>
@@ -191,7 +195,7 @@ export const SalesHistory: React.FC = () => {
               }}
               className="text-xs text-blue-600 hover:text-blue-800 font-medium"
             >
-              Reset to Today's Bills
+              {t('sales.resetToday')}
             </button>
           </div>
         )}
@@ -203,22 +207,22 @@ export const SalesHistory: React.FC = () => {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                <th className="py-3 px-4 font-semibold">Invoice No</th>
-                <th className="py-3 px-4 font-semibold">Date & Time</th>
-                <th className="py-3 px-4 font-semibold">Customer</th>
-                <th className="py-3 px-4 font-semibold">Items</th>
-                <th className="py-3 px-4 font-semibold">Payment</th>
-                <th className="py-3 px-4 text-right font-semibold">Total Amount</th>
-                <th className="py-3 px-4 font-semibold">Billed By</th>
-                <th className="py-3 px-4 font-semibold">Status</th>
-                <th className="py-3 px-4 text-center font-semibold">Actions</th>
+                <th className="py-3 px-4 font-semibold">{t('sales.col.invoice')}</th>
+                <th className="py-3 px-4 font-semibold">{t('sales.col.dateTime')}</th>
+                <th className="py-3 px-4 font-semibold">{t('common.customer')}</th>
+                <th className="py-3 px-4 font-semibold">{t('sales.col.items')}</th>
+                <th className="py-3 px-4 font-semibold">{t('sales.col.payment')}</th>
+                <th className="py-3 px-4 text-right font-semibold">{t('sales.col.total')}</th>
+                <th className="py-3 px-4 font-semibold">{t('sales.billedBy')}</th>
+                <th className="py-3 px-4 font-semibold">{t('common.status')}</th>
+                <th className="py-3 px-4 text-center font-semibold">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredSales.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-8 text-center text-slate-400">
-                    No sales records found matching the selected criteria.
+                    {t('sales.empty')}
                   </td>
                 </tr>
               ) : (
@@ -240,7 +244,7 @@ export const SalesHistory: React.FC = () => {
                         {sale.invoice_no}
                         {sale.is_offline_entry && (
                           <span className="block text-[10px] text-amber-600 font-normal">
-                            Paper Bill {sale.offline_bill_ref ? `(${sale.offline_bill_ref})` : ''}
+                            {t('sales.paperBill')} {sale.offline_bill_ref ? `(${sale.offline_bill_ref})` : ''}
                           </span>
                         )}
                       </td>
@@ -255,7 +259,7 @@ export const SalesHistory: React.FC = () => {
                       </td>
                       <td className="py-3 px-4">
                         <span className="font-medium text-slate-800">
-                          {sale.customer_name || 'Retail Walk-in'}
+                          {sale.customer_name || t('sales.walkIn')}
                         </span>
                         {sale.customer_mobile && (
                           <span className="block text-[11px] text-slate-400 font-mono-numbers">
@@ -264,9 +268,9 @@ export const SalesHistory: React.FC = () => {
                         )}
                       </td>
                       <td className="py-3 px-4 text-slate-600">
-                        <span className="font-mono-numbers">{sale.items.length} items</span>
+                        <span className="font-mono-numbers">{t('sales.itemsCount', { count: sale.items.length })}</span>
                         <span className="block text-[11px] text-slate-400 truncate max-w-[140px]">
-                          {sale.items.map(i => `${i.qty} ${i.product_name}`).join(', ')}
+                          {sale.items.map(i => `${i.qty} ${nameOf(i.product_id, i.product_name)}`).join(', ')}
                         </span>
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
@@ -281,7 +285,7 @@ export const SalesHistory: React.FC = () => {
                               : 'bg-purple-50 text-purple-700'
                           }`}
                         >
-                          {sale.payment_method === 'credit' ? 'Udhaar' : sale.payment_method}
+                          {tx(`payment.${sale.payment_method}`, sale.payment_method)}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right font-extrabold font-mono-numbers text-slate-900 whitespace-nowrap">
@@ -292,13 +296,13 @@ export const SalesHistory: React.FC = () => {
                         {sale.status === 'completed' ? (
                           <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Paid</span>
+                            <span>{t('sales.paid')}</span>
                           </span>
                         ) : (
                           <div>
                             <span className="inline-flex items-center gap-1 text-red-600 font-medium">
                               <XCircle className="w-3.5 h-3.5" />
-                              <span>Cancelled</span>
+                              <span>{t('status.cancelled')}</span>
                             </span>
                             {sale.cancel_reason && (
                               <span className="block text-[10px] text-red-500 max-w-[130px] truncate" title={sale.cancel_reason}>
@@ -315,7 +319,7 @@ export const SalesHistory: React.FC = () => {
                             type="button"
                             onClick={() => setActiveReceiptSale(sale)}
                             className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md transition-colors"
-                            title="View / Print Receipt"
+                            title={t('sales.viewReceipt')}
                           >
                             <Eye className="w-4 h-4" />
                           </button>
@@ -338,9 +342,9 @@ export const SalesHistory: React.FC = () => {
                               title={
                                 isCashierBlocked
                                   ? !can('cancel_bills')
-                                    ? 'Cancelling bills is turned off for your account. Ask the Owner.'
-                                    : 'Cashiers cannot cancel past or closed-day sales. Owner required.'
-                                  : 'Cancel Sale & Reverse Stock'
+                                    ? t('sales.cancelOff')
+                                    : t('sales.cancelBlocked')
+                                  : t('sales.cancelTitle')
                               }
                             >
                               <Ban className="w-4 h-4" />
@@ -367,23 +371,26 @@ export const SalesHistory: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-bold text-slate-900 text-sm">
-                  Cancel Bill {cancellingSale.invoice_no}?
+                  {t('sales.cancelHeading', { no: cancellingSale.invoice_no })}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Amount: ₹{cancellingSale.total.toFixed(2)} · Payment: {cancellingSale.payment_method.toUpperCase()}
+                  {t('sales.cancelMeta', {
+                    amount: cancellingSale.total.toFixed(2),
+                    mode: tx(`payment.${cancellingSale.payment_method}`, cancellingSale.payment_method).toUpperCase(),
+                  })}
                 </p>
               </div>
             </div>
 
             <div className="p-3 bg-amber-50 rounded-lg text-amber-900 text-xs space-y-1">
-              <p className="font-semibold">Business Rule Enforcement:</p>
+              <p className="font-semibold">{t('sales.rules')}</p>
               <ul className="list-disc pl-4 space-y-0.5 text-[11px] text-amber-800">
-                <li>Bill is never deleted; status changes to Cancelled.</li>
-                <li>Stock for all {cancellingSale.items.length} items will be reversed automatically.</li>
+                <li>{t('sales.rule.notDeleted')}</li>
+                <li>{t('sales.rule.stock', { count: cancellingSale.items.length })}</li>
                 {cancellingSale.payment_method === 'credit' && (
-                  <li>Customer Udhaar dues will be reduced by ₹{cancellingSale.total.toFixed(2)}.</li>
+                  <li>{t('sales.rule.dues', { amount: cancellingSale.total.toFixed(2) })}</li>
                 )}
-                <li>Action is recorded permanently in the system audit log.</li>
+                <li>{t('sales.rule.audit')}</li>
               </ul>
             </div>
 
@@ -395,12 +402,12 @@ export const SalesHistory: React.FC = () => {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Mandatory Cancellation Reason *
+                {t('sales.reasonLabel')}
               </label>
               <textarea
                 required
                 rows={2}
-                placeholder="e.g. Customer returned items / Milk pouch leaked / Wrong bill entry..."
+                placeholder={t('sales.reasonPlaceholder')}
                 value={cancelReason}
                 onChange={e => setCancelReason(e.target.value)}
                 className="w-full text-xs p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-slate-900"
@@ -413,7 +420,7 @@ export const SalesHistory: React.FC = () => {
                 onClick={() => setCancellingSale(null)}
                 className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900"
               >
-                Keep Bill
+                {t('sales.keepBill')}
               </button>
               <button
                 type="button"
@@ -421,7 +428,7 @@ export const SalesHistory: React.FC = () => {
                 onClick={handleConfirmCancel}
                 className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50"
               >
-                Confirm Cancellation & Reversal
+                {t('sales.confirmCancel')}
               </button>
             </div>
           </div>

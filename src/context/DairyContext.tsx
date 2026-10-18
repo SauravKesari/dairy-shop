@@ -66,6 +66,7 @@ import { LoginScreen, AuthStatus } from '../components/auth/LoginScreen';
 import { can, permissionDenied } from '../lib/permissions';
 import { allUnits, isValidQtyForUnit, wholeQtyError } from '../lib/units';
 import { saleProfit, SaleProfit, emptyDay, addSaleToDay } from '../lib/profit';
+import { translate, translateDynamic, getCurrentLang } from '../i18n';
 
 interface NewSaleItemInput {
   product_id: string;
@@ -162,6 +163,7 @@ interface DairyContextType {
   expiryAlerts: ExpiryAlertItem[];
   importProductsCSV: (csvText: string) => Promise<Result & { count: number }>;
   importCustomerDuesCSV: (csvText: string) => Promise<Result & { count: number }>;
+  importProductNamesHiCSV: (csvText: string) => Promise<Result & { count: number; notFound: string[] }>;
   loadDemoData: () => Promise<Result>;
   exportDatabaseJSON: () => string;
   importDatabaseJSON: (jsonString: string) => Promise<Result>;
@@ -193,8 +195,11 @@ const localDate = (d = new Date()) =>
 
 const newRef = (col: string) => doc(collection(db, col));
 
-const OFFLINE_SALE_ERROR =
-  'No internet connection. Sales need internet to lock stock and issue an invoice number — write a numbered paper bill now and enter it later as an offline entry.';
+const offlineSaleError = () => translate('errors.offlineSale');
+
+// Error messages name products and units in the current app language
+const productName = (p: Pick<Product, 'name' | 'name_hi'>) => (getCurrentLang() === 'hi' && p.name_hi) || p.name;
+const unitName = (unit: string) => translateDynamic(`unit.${unit}`, unit);
 
 // Online: wait for the server so rule rejections are shown. Offline: Firestore queues the write.
 const persist = async (write: Promise<unknown>): Promise<Result> => {
@@ -436,11 +441,11 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
 
   // Categories
   const addCategory = async (name: string): Promise<Result & { category?: Category }> => {
-    if (currentUser.role !== 'owner') return { success: false, error: 'Only the Owner can add categories.' };
+    if (currentUser.role !== 'owner') return { success: false, error: translate('errors.ownerAddCategories') };
     const trimmed = name.trim();
-    if (!trimmed) return { success: false, error: 'Category name is required.' };
+    if (!trimmed) return { success: false, error: translate('errors.categoryNameRequired') };
     if (categories.some(c => c.name.toLowerCase() === trimmed.toLowerCase())) {
-      return { success: false, error: `Category "${trimmed}" already exists.` };
+      return { success: false, error: translate('errors.categoryExists', { name: trimmed }) };
     }
     const ref = newRef('categories');
     const category: Category = { id: ref.id, name: trimmed, active: true };
@@ -450,13 +455,13 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
 
   const addCustomUnit = (unit: string): Promise<Result> => {
     if (currentUser.role !== 'owner') {
-      return Promise.resolve({ success: false, error: 'Only the Owner can add units.' });
+      return Promise.resolve({ success: false, error: translate('errors.ownerAddUnits') });
     }
     const trimmed = unit.trim();
-    if (!trimmed) return Promise.resolve({ success: false, error: 'Unit name is required.' });
-    if (trimmed.length > 12) return Promise.resolve({ success: false, error: 'Keep the unit short (12 characters max), e.g. "dozen".' });
+    if (!trimmed) return Promise.resolve({ success: false, error: translate('errors.unitNameRequired') });
+    if (trimmed.length > 12) return Promise.resolve({ success: false, error: translate('errors.unitTooLongExample') });
     if (allUnits(settings).some(u => u.toLowerCase() === trimmed.toLowerCase())) {
-      return Promise.resolve({ success: false, error: `Unit "${trimmed}" already exists.` });
+      return Promise.resolve({ success: false, error: translate('errors.unitExists', { name: trimmed }) });
     }
     return commitOps([
       b => b.set(doc(db, 'settings', 'shop'), { custom_units: arrayUnion(trimmed) }, { merge: true }),
@@ -467,17 +472,17 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
   // Products point at the category id, so a rename shows everywhere at once. Categories are hidden, never deleted.
   const updateCategory = (id: string, updates: Partial<Pick<Category, 'name' | 'active'>>): Promise<Result> => {
     if (currentUser.role !== 'owner') {
-      return Promise.resolve({ success: false, error: 'Only the Owner can edit categories.' });
+      return Promise.resolve({ success: false, error: translate('errors.ownerEditCategories') });
     }
     const cat = categories.find(c => c.id === id);
-    if (!cat) return Promise.resolve({ success: false, error: 'Category not found.' });
+    if (!cat) return Promise.resolve({ success: false, error: translate('errors.categoryNotFound') });
 
     const changes: Partial<Category> = {};
     if (updates.name !== undefined) {
       const trimmed = updates.name.trim();
-      if (!trimmed) return Promise.resolve({ success: false, error: 'Category name is required.' });
+      if (!trimmed) return Promise.resolve({ success: false, error: translate('errors.categoryNameRequired') });
       if (categories.some(c => c.id !== id && c.name.toLowerCase() === trimmed.toLowerCase())) {
-        return Promise.resolve({ success: false, error: `Category "${trimmed}" already exists.` });
+        return Promise.resolve({ success: false, error: translate('errors.categoryExists', { name: trimmed }) });
       }
       changes.name = trimmed;
     }
@@ -494,17 +499,17 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
     oldUnit: string,
     newUnit: string
   ): Promise<Result & { productsUpdated?: number }> => {
-    if (currentUser.role !== 'owner') return { success: false, error: 'Only the Owner can edit units.' };
+    if (currentUser.role !== 'owner') return { success: false, error: translate('errors.ownerEditUnits') };
     const customUnits = settings.custom_units || [];
-    if (!customUnits.includes(oldUnit)) return { success: false, error: 'Only custom units can be renamed.' };
+    if (!customUnits.includes(oldUnit)) return { success: false, error: translate('errors.onlyCustomRename') };
     const trimmed = newUnit.trim();
-    if (!trimmed) return { success: false, error: 'Unit name is required.' };
-    if (trimmed.length > 12) return { success: false, error: 'Keep the unit short (12 characters max).' };
+    if (!trimmed) return { success: false, error: translate('errors.unitNameRequired') };
+    if (trimmed.length > 12) return { success: false, error: translate('errors.unitTooLong') };
     if (trimmed === oldUnit) return { success: true, productsUpdated: 0 };
     if (allUnits(settings).some(u => u !== oldUnit && u.toLowerCase() === trimmed.toLowerCase())) {
-      return { success: false, error: `Unit "${trimmed}" already exists.` };
+      return { success: false, error: translate('errors.unitExists', { name: trimmed }) };
     }
-    if (!navigator.onLine) return { success: false, error: 'No internet connection. Rename the unit once online.' };
+    if (!navigator.onLine) return { success: false, error: translate('errors.offlineRenameUnit') };
 
     const affected = products.filter(p => p.unit === oldUnit);
     const nowIso = new Date().toISOString();
@@ -518,17 +523,17 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
 
   const removeCustomUnit = (unit: string): Promise<Result> => {
     if (currentUser.role !== 'owner') {
-      return Promise.resolve({ success: false, error: 'Only the Owner can remove units.' });
+      return Promise.resolve({ success: false, error: translate('errors.ownerRemoveUnits') });
     }
     if (!(settings.custom_units || []).includes(unit)) {
-      return Promise.resolve({ success: false, error: 'Built-in units cannot be removed.' });
+      return Promise.resolve({ success: false, error: translate('errors.builtInUnit') });
     }
     const inUse = products.filter(p => p.unit === unit);
     if (inUse.length > 0) {
       const names = inUse.slice(0, 3).map(p => p.name).join(', ');
       return Promise.resolve({
         success: false,
-        error: `"${unit}" is used by ${inUse.length} product(s): ${names}${inUse.length > 3 ? '…' : ''}. Change their unit first.`,
+        error: translate('errors.unitInUse', { unit, count: inUse.length, names: `${names}${inUse.length > 3 ? '…' : ''}` }),
       });
     }
     return commitOps([
@@ -581,7 +586,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
 
   const toggleProductActive = (id: string) => {
     const p = products.find(x => x.id === id);
-    if (!p) return Promise.resolve({ success: false, error: 'Product not found' });
+    if (!p) return Promise.resolve({ success: false, error: translate('errors.productNotFound') });
     return commitOps([updateOp(doc(db, 'products', id), { active: !p.active, updated_at: new Date().toISOString() })]);
   };
 
@@ -656,19 +661,19 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
   // can't sell the last packet twice (replaces SELECT … FOR UPDATE from the plan).
   const createSale = async (input: NewSaleInput): Promise<Result & { sale?: Sale }> => {
     const businessDate = input.custom_business_date || currentBusinessDate;
-    const closedDayError = `Cannot create sale: Day ${businessDate} has already been closed and locked! Contact Owner to re-open.`;
+    const closedDayError = translate('errors.dayClosedSale', { date: businessDate });
 
     // Rule 8: After daily closing, cashiers can't create or back-date entries for that date
     if (currentUser.role === 'cashier' && isDateClosed(businessDate)) {
       return { success: false, error: closedDayError };
     }
 
-    if (input.items.length === 0) return { success: false, error: 'Cart is empty.' };
+    if (input.items.length === 0) return { success: false, error: translate('errors.cartEmpty') };
     const fractionalPack = input.items
       .map(item => ({ item, product: products.find(p => p.id === item.product_id) }))
       .find(({ item, product }) => product && !isValidQtyForUnit(item.qty, product.unit));
     if (fractionalPack?.product) {
-      return { success: false, error: wholeQtyError(fractionalPack.product.name, fractionalPack.product.unit, fractionalPack.item.qty) };
+      return { success: false, error: wholeQtyError(productName(fractionalPack.product), fractionalPack.product.unit, fractionalPack.item.qty) };
     }
 
     // Cashier discount limit check
@@ -678,7 +683,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
       if (discountPercent > settings.cashier_max_discount_percent) {
         return {
           success: false,
-          error: `Discount of ₹${input.discount} (${discountPercent.toFixed(1)}%) exceeds Cashier limit of ${settings.cashier_max_discount_percent}%. Owner authorization required.`,
+          error: translate('errors.discountLimit', { amount: input.discount ?? 0, percent: discountPercent.toFixed(1), limit: settings.cashier_max_discount_percent }),
         };
       }
     }
@@ -689,10 +694,10 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
 
     // Rule 10: Credit sale requires customer
     if (input.payment_method === 'credit' && !input.customer_id) {
-      return { success: false, error: 'Credit sale (Udhaar) requires selecting a registered customer.' };
+      return { success: false, error: translate('errors.creditNeedsCustomer') };
     }
 
-    if (!navigator.onLine) return { success: false, error: OFFLINE_SALE_ERROR };
+    if (!navigator.onLine) return { success: false, error: offlineSaleError() };
 
     const qtyByProduct = new Map<string, number>();
     input.items.forEach(item => qtyByProduct.set(item.product_id, (qtyByProduct.get(item.product_id) || 0) + item.qty));
@@ -718,7 +723,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
 
         const fresh = new Map<string, Product>();
         productSnaps.forEach(s => {
-          if (!s.exists()) throw new BusinessError(`Product not found: ${s.id}`);
+          if (!s.exists()) throw new BusinessError(translate('errors.productNotFoundId', { id: s.id }));
           fresh.set(s.id, { ...s.data(), id: s.id } as Product);
         });
 
@@ -727,14 +732,14 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
           const product = fresh.get(pid)!;
           if (!settings.allow_negative_stock && product.current_stock < qty) {
             throw new BusinessError(
-              `Insufficient stock for ${product.name}. Current stock: ${product.current_stock} ${product.unit}, requested: ${qty} ${product.unit}`
+              translate('errors.insufficientStockSale', { name: productName(product), stock: product.current_stock, qty, unit: unitName(product.unit) })
             );
           }
         });
 
         let customer: Customer | undefined;
         if (customerSnap) {
-          if (!customerSnap.exists()) throw new BusinessError('Selected credit customer does not exist.');
+          if (!customerSnap.exists()) throw new BusinessError(translate('errors.creditCustomerMissing'));
           customer = { ...customerSnap.data(), id: customerSnap.id } as Customer;
         }
 
@@ -779,7 +784,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
           const projected = customer.current_dues + finalTotal;
           if (projected > customer.credit_limit) {
             throw new BusinessError(
-              `Credit sale would exceed ${customer.name}'s credit limit of ₹${customer.credit_limit}. Current dues: ₹${customer.current_dues}, Bill total: ₹${finalTotal} (Projected dues: ₹${projected}).`
+              translate('errors.creditLimitSale', { name: customer.name, limit: customer.credit_limit, dues: customer.current_dues, total: finalTotal, projected })
             );
           }
         }
@@ -875,11 +880,11 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
   // Cashier: same open day only; owner: any day, audited.
   const cancelSale = async (saleId: string, reason: string): Promise<Result> => {
     const localSale = sales.find(s => s.id === saleId);
-    if (!localSale) return { success: false, error: 'Sale not found.' };
-    if (localSale.status === 'cancelled') return { success: false, error: 'Sale is already cancelled.' };
+    if (!localSale) return { success: false, error: translate('errors.saleNotFound') };
+    if (localSale.status === 'cancelled') return { success: false, error: translate('errors.saleAlreadyCancelled') };
 
     if (!reason || reason.trim().length === 0) {
-      return { success: false, error: 'A cancellation reason is mandatory.' };
+      return { success: false, error: translate('errors.cancelReasonRequired') };
     }
     if (!can(currentUser, 'cancel_bills')) return { success: false, error: permissionDenied('cancel_bills') };
 
@@ -888,22 +893,22 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
       if (localSale.business_date !== currentBusinessDate) {
         return {
           success: false,
-          error: 'Cashier permission denied: Cashiers can only cancel sales created today. Past dates require Owner.',
+          error: translate('errors.cashierCancelToday'),
         };
       }
       if (isDateClosed(localSale.business_date)) {
-        return { success: false, error: 'Cashier permission denied: Cannot cancel sale from a closed day.' };
+        return { success: false, error: translate('errors.cashierCancelClosed') };
       }
     }
 
-    if (!navigator.onLine) return { success: false, error: 'No internet connection. Cancel the bill once the connection is back.' };
+    if (!navigator.onLine) return { success: false, error: translate('errors.offlineCancel') };
 
     try {
       await runTransaction(db, async tx => {
         const saleSnap = await tx.get(doc(db, 'sales', saleId));
-        if (!saleSnap.exists()) throw new BusinessError('Sale not found.');
+        if (!saleSnap.exists()) throw new BusinessError(translate('errors.saleNotFound'));
         const sale = { ...saleSnap.data(), id: saleSnap.id } as Sale;
-        if (sale.status === 'cancelled') throw new BusinessError('Sale is already cancelled.');
+        if (sale.status === 'cancelled') throw new BusinessError(translate('errors.saleAlreadyCancelled'));
 
         const customerSnap =
           sale.payment_method === 'credit' && sale.customer_id ? await tx.get(doc(db, 'customers', sale.customer_id)) : null;
@@ -989,16 +994,16 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
       return Promise.resolve({ success: false, error: permissionDenied('record_purchases') });
     }
     const supplier = suppliers.find(s => s.id === input.supplier_id);
-    if (!supplier) return Promise.resolve({ success: false, error: 'Supplier not found' });
+    if (!supplier) return Promise.resolve({ success: false, error: translate('errors.supplierNotFound') });
     if (!input.items || input.items.length === 0) {
-      return Promise.resolve({ success: false, error: 'Please add at least one purchase item line.' });
+      return Promise.resolve({ success: false, error: translate('errors.purchaseNoItems') });
     }
     const missing = input.items.find(line => !products.some(p => p.id === line.product_id));
-    if (missing) return Promise.resolve({ success: false, error: `Product not found: ${missing.product_id}` });
+    if (missing) return Promise.resolve({ success: false, error: translate('errors.productNotFoundId', { id: missing.product_id }) });
     for (const line of input.items) {
       const prod = products.find(p => p.id === line.product_id)!;
       if (!isValidQtyForUnit(line.qty, prod.unit)) {
-        return Promise.resolve({ success: false, error: wholeQtyError(prod.name, prod.unit, line.qty) });
+        return Promise.resolve({ success: false, error: wholeQtyError(productName(prod), prod.unit, line.qty) });
       }
     }
 
@@ -1091,26 +1096,26 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
     reason: string
   ): Promise<Result> => {
     if (currentUser.role !== 'owner') {
-      return { success: false, error: 'Only shop Owner is authorized to adjust stock.' };
+      return { success: false, error: translate('errors.ownerAdjustStock') };
     }
     if (!reason || reason.trim().length === 0) {
-      return { success: false, error: 'Mandatory reason required for stock adjustment.' };
+      return { success: false, error: translate('errors.adjustReasonRequired') };
     }
-    if (!navigator.onLine) return { success: false, error: 'No internet connection. Try the adjustment again once online.' };
+    if (!navigator.onLine) return { success: false, error: translate('errors.offlineAdjust') };
 
     try {
       await runTransaction(db, async tx => {
         const snap = await tx.get(doc(db, 'products', productId));
-        if (!snap.exists()) throw new BusinessError('Product not found');
+        if (!snap.exists()) throw new BusinessError(translate('errors.productNotFound'));
         const product = { ...snap.data(), id: snap.id } as Product;
         if (!isValidQtyForUnit(qtyChange, product.unit)) {
-          throw new BusinessError(wholeQtyError(product.name, product.unit, qtyChange));
+          throw new BusinessError(wholeQtyError(productName(product), product.unit, qtyChange));
         }
 
         const newStock = r3(product.current_stock + qtyChange);
         if (!settings.allow_negative_stock && newStock < 0) {
           throw new BusinessError(
-            `Insufficient stock for ${product.name}. Available: ${product.current_stock} ${product.unit}, requested deduction: ${Math.abs(qtyChange)} ${product.unit}`
+            translate('errors.insufficientStockAdjust', { name: productName(product), stock: product.current_stock, qty: Math.abs(qtyChange), unit: unitName(product.unit) })
           );
         }
 
@@ -1144,9 +1149,9 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
     if (!can(currentUser, 'receive_payments')) {
       return Promise.resolve({ success: false, error: permissionDenied('receive_payments') });
     }
-    if (amount <= 0) return Promise.resolve({ success: false, error: 'Payment amount must be greater than zero.' });
+    if (amount <= 0) return Promise.resolve({ success: false, error: translate('errors.paymentPositive') });
     const customer = customers.find(c => c.id === customerId);
-    if (!customer) return Promise.resolve({ success: false, error: 'Customer not found.' });
+    if (!customer) return Promise.resolve({ success: false, error: translate('errors.customerNotFound') });
 
     const newDues = r2(customer.current_dues - amount);
     const lref = newRef('customer_ledger');
@@ -1177,19 +1182,19 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
   // Manual Udhaar: goods or cash given to a customer without a bill
   const addCustomerDues = async (customerId: string, amount: number, note: string): Promise<Result> => {
     if (!can(currentUser, 'add_udhaar')) return { success: false, error: permissionDenied('add_udhaar') };
-    if (!(amount > 0)) return { success: false, error: 'Amount must be greater than zero.' };
+    if (!(amount > 0)) return { success: false, error: translate('errors.amountPositive') };
     if (!note || note.trim().length === 0) {
-      return { success: false, error: 'A note is mandatory (what was given on Udhaar).' };
+      return { success: false, error: translate('errors.udhaarNoteRequired') };
     }
     if (currentUser.role === 'cashier' && isDateClosed(currentBusinessDate)) {
-      return { success: false, error: 'Cashier permission denied: Cannot add Udhaar on a closed day.' };
+      return { success: false, error: translate('errors.cashierUdhaarClosed') };
     }
-    if (!navigator.onLine) return { success: false, error: 'No internet connection. Add the Udhaar once online.' };
+    if (!navigator.onLine) return { success: false, error: translate('errors.offlineUdhaar') };
 
     try {
       await runTransaction(db, async tx => {
         const snap = await tx.get(doc(db, 'customers', customerId));
-        if (!snap.exists()) throw new BusinessError('Customer not found.');
+        if (!snap.exists()) throw new BusinessError(translate('errors.customerNotFound'));
         const customer = { ...snap.data(), id: snap.id } as Customer;
 
         const dues = Number(customer.current_dues) || 0;
@@ -1197,7 +1202,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
         // Rule 10: same credit limit check as credit bills
         if (customer.credit_limit !== null && customer.credit_limit !== undefined && newDues > customer.credit_limit) {
           throw new BusinessError(
-            `Would exceed ${customer.name}'s credit limit of ₹${customer.credit_limit}. Current dues: ₹${dues}, Adding: ₹${amount} (Projected dues: ₹${newDues}).`
+            translate('errors.creditLimitUdhaar', { name: customer.name, limit: customer.credit_limit, dues, amount, projected: newDues })
           );
         }
 
@@ -1241,7 +1246,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
     }
     // Check if date is closed
     if (currentUser.role === 'cashier' && isDateClosed(expenseInput.expense_date)) {
-      return Promise.resolve({ success: false, error: 'Cannot add expense for a closed day.' });
+      return Promise.resolve({ success: false, error: translate('errors.expenseClosedDay') });
     }
 
     const ref = newRef('expenses');
@@ -1264,12 +1269,12 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
 
   const updateExpense = (id: string, updates: Partial<Expense>): Promise<Result> => {
     const exp = expenses.find(e => e.id === id);
-    if (!exp) return Promise.resolve({ success: false, error: 'Expense not found' });
+    if (!exp) return Promise.resolve({ success: false, error: translate('errors.expenseNotFound') });
     if (!can(currentUser, 'manage_expenses')) {
       return Promise.resolve({ success: false, error: permissionDenied('manage_expenses') });
     }
     if (currentUser.role === 'cashier' && exp.expense_date !== currentBusinessDate) {
-      return Promise.resolve({ success: false, error: 'Cashier can only edit same-day expenses.' });
+      return Promise.resolve({ success: false, error: translate('errors.cashierExpenseToday') });
     }
     return commitOps([
       updateOp(doc(db, 'expenses', id), toUpdate(updates)),
@@ -1279,7 +1284,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
 
   const deleteExpense = (id: string): Promise<Result> => {
     if (currentUser.role !== 'owner') {
-      return Promise.resolve({ success: false, error: 'Only Owner can delete an expense record.' });
+      return Promise.resolve({ success: false, error: translate('errors.ownerDeleteExpense') });
     }
     return commitOps([b => b.delete(doc(db, 'expenses', id)), auditOp('DELETE_EXPENSE', 'expense', id, {})]);
   };
@@ -1387,10 +1392,10 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
   // Rule 8: Owner re-open is audited
   const reopenDailyClosing = (date: string, reason: string): Promise<Result> => {
     if (currentUser.role !== 'owner') {
-      return Promise.resolve({ success: false, error: 'Only the Owner can re-open a closed business day.' });
+      return Promise.resolve({ success: false, error: translate('errors.ownerReopen') });
     }
     if (!reason || reason.trim().length === 0) {
-      return Promise.resolve({ success: false, error: 'A mandatory reason is required to re-open a closed day.' });
+      return Promise.resolve({ success: false, error: translate('errors.reopenReasonRequired') });
     }
 
     return commitOps([
@@ -1470,11 +1475,13 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
   const importProductsCSV = async (csvText: string): Promise<Result & { count: number }> => {
     try {
       const lines = csvText.trim().split('\n');
-      if (lines.length <= 1) return { success: false, count: 0, error: 'CSV file is empty or only has headers' };
+      if (lines.length <= 1) return { success: false, count: 0, error: translate('errors.csvEmpty') };
 
       const ops: Op[] = [];
       const knownCategories = [...categories];
       let imported = 0;
+      // Optional extra column, found by header name so older 8-9 column files still work
+      const nameHiCol = lines[0].split(',').map(h => h.trim().toLowerCase()).indexOf('name_hi');
 
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
@@ -1490,8 +1497,9 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
         const min_stock = parseFloat(cols[5]) || 10;
         const track_expiry = (cols[6] || 'yes').toLowerCase() === 'yes';
         const opening_stock = parseFloat(cols[7]) || 0;
+        const name_hi = nameHiCol >= 0 ? cols[nameHiCol] || undefined : undefined;
         if (!isValidQtyForUnit(opening_stock, unit)) {
-          return { success: false, count: 0, error: `Line ${i + 1}: ${wholeQtyError(name, unit, opening_stock)}` };
+          return { success: false, count: 0, error: translate('errors.csvLine', { line: i + 1, error: wholeQtyError(name, unit, opening_stock) }) };
         }
 
         let category = knownCategories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
@@ -1508,6 +1516,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
             {
               category_id: category.id,
               name,
+              name_hi,
               sku,
               unit,
               purchase_price,
@@ -1527,7 +1536,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
       const res = await commitOps(ops);
       return { ...res, count: res.success ? imported : 0 };
     } catch (err: any) {
-      return { success: false, count: 0, error: err.message || 'Failed to parse CSV' };
+      return { success: false, count: 0, error: err.message || translate('errors.csvParse') };
     }
   };
 
@@ -1535,7 +1544,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
   const importCustomerDuesCSV = async (csvText: string): Promise<Result & { count: number }> => {
     try {
       const lines = csvText.trim().split('\n');
-      if (lines.length <= 1) return { success: false, count: 0, error: 'CSV file is empty or only has headers' };
+      if (lines.length <= 1) return { success: false, count: 0, error: translate('errors.csvEmpty') };
 
       const ops: Op[] = [];
       let imported = 0;
@@ -1560,8 +1569,41 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
       const res = await commitOps(ops);
       return { ...res, count: res.success ? imported : 0 };
     } catch (err: any) {
-      return { success: false, count: 0, error: err.message || 'Failed to parse CSV' };
+      return { success: false, count: 0, error: err.message || translate('errors.csvParse') };
     }
+  };
+
+  // Fills Hindi names on existing products, matched by English name (name,name_hi); stock and history untouched
+  const importProductNamesHiCSV = async (
+    csvText: string
+  ): Promise<Result & { count: number; notFound: string[] }> => {
+    const lines = csvText.trim().split('\n');
+    if (lines.length <= 1) return { success: false, count: 0, notFound: [], error: translate('errors.csvEmpty') };
+
+    const byName = new Map(products.map(p => [p.name.trim().toLowerCase(), p]));
+    const nowIso = new Date().toISOString();
+    const ops: Op[] = [];
+    const notFound: string[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+      if (cols.length !== 2 || !cols[0] || !cols[1]) {
+        return { success: false, count: 0, notFound: [], error: translate('errors.csvNamesHiFormat', { line: i + 1 }) };
+      }
+      const product = byName.get(cols[0].toLowerCase());
+      if (!product) {
+        notFound.push(cols[0]);
+        continue;
+      }
+      ops.push(updateOp(doc(db, 'products', product.id), { name_hi: cols[1], updated_at: nowIso }));
+    }
+
+    const count = ops.length;
+    if (count === 0) return { success: false, count: 0, notFound, error: translate('errors.noNamesMatched') };
+    ops.push(auditOp('IMPORT_PRODUCT_NAMES_HI', 'products', 'batch', { count, not_found: notFound.length }));
+    const res = await commitOps(ops);
+    return { ...res, count: res.success ? count : 0, notFound };
   };
 
   // Writes whole collections with their existing ids (demo seed + backup restore)
@@ -1607,9 +1649,9 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
 
   // Demo seed: only into an empty shop, so real data is never overwritten
   const loadDemoData = async (): Promise<Result> => {
-    if (!isOwner) return { success: false, error: 'Only the Owner can load demo data.' };
-    if (products.length > 0) return { success: false, error: 'Demo data can only be loaded into an empty shop (no products yet).' };
-    if (!navigator.onLine) return { success: false, error: 'No internet connection.' };
+    if (!isOwner) return { success: false, error: translate('errors.ownerDemo') };
+    if (products.length > 0) return { success: false, error: translate('errors.demoNotEmpty') };
+    if (!navigator.onLine) return { success: false, error: translate('err.noInternet') };
     return commitOps([
       ...restoreOps({
         categories: initialCategories,
@@ -1653,8 +1695,8 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
 
   // Restore JSON (Week 5: "do a full restore on a fresh database"). Staff logins are not restored.
   const importDatabaseJSON = async (jsonString: string): Promise<Result> => {
-    if (!isOwner) return { success: false, error: 'Only the Owner can restore a backup.' };
-    if (!navigator.onLine) return { success: false, error: 'No internet connection.' };
+    if (!isOwner) return { success: false, error: translate('errors.ownerRestore') };
+    if (!navigator.onLine) return { success: false, error: translate('err.noInternet') };
     try {
       const data = JSON.parse(jsonString);
       const ops = restoreOps(data);
@@ -1662,15 +1704,15 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
       ops.push(auditOp('RESTORE_DATABASE', 'system', 'root', { version: data.version }));
       return commitOps(ops);
     } catch (err: any) {
-      return { success: false, error: err.message || 'Invalid JSON format' };
+      return { success: false, error: err.message || translate('errors.invalidJson') };
     }
   };
 
   // User management: each staff member gets a Firebase Auth login (mobile + PIN)
   const addUser = async (name: string, mobile: string, pin: string, role: 'owner' | 'cashier'): Promise<Result> => {
-    if (!isOwner) return { success: false, error: 'Only the Owner can add users.' };
-    if (pin.length < MIN_PIN_LENGTH) return { success: false, error: `PIN must be at least ${MIN_PIN_LENGTH} digits.` };
-    if (!navigator.onLine) return { success: false, error: 'No internet connection.' };
+    if (!isOwner) return { success: false, error: translate('errors.ownerAddUsers') };
+    if (pin.length < MIN_PIN_LENGTH) return { success: false, error: translate('err.weakPin', { min: MIN_PIN_LENGTH }) };
+    if (!navigator.onLine) return { success: false, error: translate('err.noInternet') };
     try {
       const uid = await createAuthUser(mobile, pin);
       const newUser: User = {
@@ -1691,9 +1733,9 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
   };
 
   const changeOwnPin = async (currentPin: string, newPin: string): Promise<Result> => {
-    if (newPin.length < MIN_PIN_LENGTH) return { success: false, error: `PIN must be at least ${MIN_PIN_LENGTH} digits.` };
+    if (newPin.length < MIN_PIN_LENGTH) return { success: false, error: translate('err.weakPin', { min: MIN_PIN_LENGTH }) };
     const fbUser = auth.currentUser;
-    if (!fbUser) return { success: false, error: 'Not signed in.' };
+    if (!fbUser) return { success: false, error: translate('errors.notSignedIn') };
     try {
       await reauthenticateWithCredential(fbUser, EmailAuthProvider.credential(mobileToEmail(currentUser.mobile), currentPin));
       await updatePassword(fbUser, newPin);
@@ -1705,9 +1747,9 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
   };
 
   const toggleUserActive = (userId: string): Promise<Result> => {
-    if (userId === currentUser.id) return Promise.resolve({ success: false, error: 'You cannot deactivate your own account.' });
+    if (userId === currentUser.id) return Promise.resolve({ success: false, error: translate('errors.selfDeactivate') });
     const u = users.find(x => x.id === userId);
-    if (!u) return Promise.resolve({ success: false, error: 'User not found.' });
+    if (!u) return Promise.resolve({ success: false, error: translate('errors.userNotFound') });
     return commitOps([
       updateOp(doc(db, 'users', userId), { active: !u.active }),
       auditOp('TOGGLE_USER_ACTIVE', 'user', userId, { name: u.name, active: !u.active }),
@@ -1716,10 +1758,10 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
 
   const updateUserPermissions = (userId: string, permissions: CashierPermissions): Promise<Result> => {
     if (currentUser.role !== 'owner') {
-      return Promise.resolve({ success: false, error: 'Only the Owner can change staff permissions.' });
+      return Promise.resolve({ success: false, error: translate('errors.ownerPermissions') });
     }
     const u = users.find(x => x.id === userId);
-    if (!u) return Promise.resolve({ success: false, error: 'User not found.' });
+    if (!u) return Promise.resolve({ success: false, error: translate('errors.userNotFound') });
     return commitOps([
       updateOp(doc(db, 'users', userId), { permissions }),
       auditOp('UPDATE_USER_PERMISSIONS', 'user', userId, { name: u.name, permissions }),
@@ -1734,9 +1776,9 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
 
   // Recomputes day summaries from the bills themselves (fills in bills made before tracking, fixes drift)
   const rebuildDailyProfit = async (from: string, to: string): Promise<Result & { days?: number; bills?: number }> => {
-    if (currentUser.role !== 'owner') return { success: false, error: 'Only the Owner can rebuild profit data.' };
-    if (!from || !to || from > to) return { success: false, error: 'Choose a valid date range.' };
-    if (!navigator.onLine) return { success: false, error: 'No internet connection.' };
+    if (currentUser.role !== 'owner') return { success: false, error: translate('errors.ownerRebuild') };
+    if (!from || !to || from > to) return { success: false, error: translate('errors.dateRange') };
+    if (!navigator.onLine) return { success: false, error: translate('err.noInternet') };
     try {
       const [salesSnap, existing] = await Promise.all([
         getDocs(query(collection(db, 'sales'), where('business_date', '>=', from), where('business_date', '<=', to))),
@@ -1825,6 +1867,7 @@ const DairyDataProvider: React.FC<{ currentUser: User; children: React.ReactNode
         expiryAlerts,
         importProductsCSV,
         importCustomerDuesCSV,
+        importProductNamesHiCSV,
         loadDemoData,
         exportDatabaseJSON,
         importDatabaseJSON,

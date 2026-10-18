@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useDairy } from '../../context/DairyContext';
 import { DEFAULT_UNITS } from '../../lib/units';
+import { useLanguage } from '../../i18n/LanguageContext';
 import { Tags, Ruler, Plus, Edit3, EyeOff, Eye, Trash2, Check, X } from 'lucide-react';
 
 // Owner screen to add, rename and hide categories, and add, rename and remove custom units
@@ -16,6 +17,7 @@ export const CategoriesUnitsScreen: React.FC = () => {
     renameCustomUnit,
     removeCustomUnit,
   } = useDairy();
+  const { t, tx } = useLanguage();
 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -48,8 +50,8 @@ export const CategoriesUnitsScreen: React.FC = () => {
   if (currentUser.role !== 'owner') {
     return (
       <div className="p-12 text-center text-slate-500">
-        <p className="font-semibold text-sm">Access Restricted</p>
-        <p className="text-xs mt-1">Only the shop Owner can manage categories and units.</p>
+        <p className="font-semibold text-sm">{t('categories.restricted')}</p>
+        <p className="text-xs mt-1">{t('categories.ownerOnly')}</p>
       </div>
     );
   }
@@ -63,7 +65,7 @@ export const CategoriesUnitsScreen: React.FC = () => {
     const res = await action();
     setBusy(false);
     if (!res.success) {
-      setError(res.error || 'Something went wrong');
+      setError(res.error || t('err.generic'));
       return false;
     }
     setNotice(successMsg);
@@ -85,7 +87,7 @@ export const CategoriesUnitsScreen: React.FC = () => {
   };
 
   const saveCategoryName = async (id: string) => {
-    if (await run(() => updateCategory(id, { name: draft }), `Category renamed to "${draft.trim()}".`)) cancelEdit();
+    if (await run(() => updateCategory(id, { name: draft }), t('categories.renamed', { name: draft.trim() }))) cancelEdit();
   };
 
   const saveUnitName = async (oldUnit: string) => {
@@ -96,7 +98,11 @@ export const CategoriesUnitsScreen: React.FC = () => {
       return res;
     }, '');
     if (ok) {
-      setNotice(`Unit "${oldUnit}" renamed to "${draft.trim()}"${updated ? ` on ${updated} product(s)` : ''}.`);
+      setNotice(
+        updated
+          ? t('categories.unitRenamedOn', { old: oldUnit, name: draft.trim(), count: updated })
+          : t('categories.unitRenamed', { old: oldUnit, name: draft.trim() })
+      );
       cancelEdit();
     }
   };
@@ -120,10 +126,10 @@ export const CategoriesUnitsScreen: React.FC = () => {
         onKeyDown={enterToSave(save)}
         className="w-full min-w-0 px-2 py-1 border border-slate-300 rounded-md text-xs"
       />
-      <button type="button" disabled={busy} onClick={save} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded" title="Save">
+      <button type="button" disabled={busy} onClick={save} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded" title={t('common.save')}>
         <Check className="w-4 h-4" />
       </button>
-      <button type="button" onClick={cancelEdit} className="p-1 text-slate-500 hover:bg-slate-100 rounded" title="Cancel">
+      <button type="button" onClick={cancelEdit} className="p-1 text-slate-500 hover:bg-slate-100 rounded" title={t('common.cancel')}>
         <X className="w-4 h-4" />
       </button>
     </div>
@@ -134,9 +140,9 @@ export const CategoriesUnitsScreen: React.FC = () => {
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <div>
-        <h2 className="text-xl font-bold tracking-tight text-slate-900">Categories & Units</h2>
+        <h2 className="text-xl font-bold tracking-tight text-slate-900">{t('categories.title')}</h2>
         <p className="text-xs text-slate-500 mt-1">
-          Rename or hide product categories, and manage custom units of measure
+          {t('categories.subtitle')}
         </p>
       </div>
 
@@ -148,19 +154,19 @@ export const CategoriesUnitsScreen: React.FC = () => {
         <section className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
           <div className="p-4 border-b border-slate-200 flex items-center gap-2">
             <Tags className="w-4 h-4 text-slate-500" />
-            <h3 className="font-bold text-sm text-slate-900">Categories</h3>
+            <h3 className="font-bold text-sm text-slate-900">{t('categories.categories')}</h3>
           </div>
 
           <form
             className="p-3 border-b border-slate-100 flex gap-2"
             onSubmit={async e => {
               e.preventDefault();
-              if (await run(() => addCategory(newCategory), `Category "${newCategory.trim()}" added.`)) setNewCategory('');
+              if (await run(() => addCategory(newCategory), t('categories.added', { name: newCategory.trim() }))) setNewCategory('');
             }}
           >
             <input
               type="text"
-              placeholder="New category, e.g. Sweets"
+              placeholder={t('categories.newCategoryPh')}
               value={newCategory}
               onChange={e => setNewCategory(e.target.value)}
               className="flex-1 min-w-0 px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
@@ -171,7 +177,7 @@ export const CategoriesUnitsScreen: React.FC = () => {
               className="px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-lg flex items-center gap-1 disabled:opacity-50"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Add</span>
+              <span>{t('common.add')}</span>
             </button>
           </form>
 
@@ -186,8 +192,8 @@ export const CategoriesUnitsScreen: React.FC = () => {
                       <span className={`font-semibold ${c.active ? 'text-slate-900' : 'text-slate-400 line-through'}`}>
                         {c.name}
                       </span>
-                      <span className="ml-2 text-slate-500">{productCountByCategory.get(c.id) || 0} products</span>
-                      {!c.active && <span className="ml-2 text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">Hidden</span>}
+                      <span className="ml-2 text-slate-500">{t('categories.productCount', { count: productCountByCategory.get(c.id) || 0 })}</span>
+                      {!c.active && <span className="ml-2 text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{t('categories.hidden')}</span>}
                     </>
                   )}
                 </div>
@@ -197,7 +203,7 @@ export const CategoriesUnitsScreen: React.FC = () => {
                       type="button"
                       onClick={() => startEdit('category', c.id, c.name)}
                       className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded"
-                      title="Rename"
+                      title={t('categories.rename')}
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
@@ -207,11 +213,11 @@ export const CategoriesUnitsScreen: React.FC = () => {
                       onClick={() =>
                         run(
                           () => updateCategory(c.id, { active: !c.active }),
-                          c.active ? `"${c.name}" hidden from the product form.` : `"${c.name}" is visible again.`
+                          c.active ? t('categories.hiddenMsg', { name: c.name }) : t('categories.visibleMsg', { name: c.name })
                         )
                       }
                       className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded"
-                      title={c.active ? 'Hide from the product form (existing products keep it)' : 'Show again'}
+                      title={c.active ? t('categories.hideTitle') : t('categories.showAgain')}
                     >
                       {c.active ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
@@ -219,7 +225,7 @@ export const CategoriesUnitsScreen: React.FC = () => {
                 )}
               </li>
             ))}
-            {categories.length === 0 && <li className="px-4 py-3 text-slate-500">No categories yet.</li>}
+            {categories.length === 0 && <li className="px-4 py-3 text-slate-500">{t('categories.noCategories')}</li>}
           </ul>
         </section>
 
@@ -227,20 +233,20 @@ export const CategoriesUnitsScreen: React.FC = () => {
         <section className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
           <div className="p-4 border-b border-slate-200 flex items-center gap-2">
             <Ruler className="w-4 h-4 text-slate-500" />
-            <h3 className="font-bold text-sm text-slate-900">Units of Measure</h3>
+            <h3 className="font-bold text-sm text-slate-900">{t('categories.units')}</h3>
           </div>
 
           <form
             className="p-3 border-b border-slate-100 flex gap-2"
             onSubmit={async e => {
               e.preventDefault();
-              if (await run(() => addCustomUnit(newUnit), `Unit "${newUnit.trim()}" added.`)) setNewUnit('');
+              if (await run(() => addCustomUnit(newUnit), t('categories.unitAdded', { name: newUnit.trim() }))) setNewUnit('');
             }}
           >
             <input
               type="text"
               maxLength={12}
-              placeholder="New unit, e.g. dozen"
+              placeholder={t('categories.newUnitPh')}
               value={newUnit}
               onChange={e => setNewUnit(e.target.value)}
               className="flex-1 min-w-0 px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
@@ -251,7 +257,7 @@ export const CategoriesUnitsScreen: React.FC = () => {
               className="px-3 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-lg flex items-center gap-1 disabled:opacity-50"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Add</span>
+              <span>{t('common.add')}</span>
             </button>
           </form>
 
@@ -264,7 +270,7 @@ export const CategoriesUnitsScreen: React.FC = () => {
                   ) : (
                     <>
                       <span className="font-semibold text-slate-900 font-mono-numbers">{u}</span>
-                      <span className="ml-2 text-slate-500">{productCountByUnit.get(u) || 0} products</span>
+                      <span className="ml-2 text-slate-500">{t('categories.productCount', { count: productCountByUnit.get(u) || 0 })}</span>
                     </>
                   )}
                 </div>
@@ -274,16 +280,16 @@ export const CategoriesUnitsScreen: React.FC = () => {
                       type="button"
                       onClick={() => startEdit('unit', u, u)}
                       className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded"
-                      title="Rename (updates every product using it)"
+                      title={t('categories.renameUnitTitle')}
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => run(() => removeCustomUnit(u), `Unit "${u}" removed.`)}
+                      onClick={() => run(() => removeCustomUnit(u), t('categories.unitRemoved', { name: u }))}
                       className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
-                      title="Remove (only when no product uses it)"
+                      title={t('categories.removeUnitTitle')}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -292,20 +298,21 @@ export const CategoriesUnitsScreen: React.FC = () => {
               </li>
             ))}
             {customUnits.length === 0 && (
-              <li className="px-4 py-3 text-slate-500">No custom units yet. Add one above.</li>
+              <li className="px-4 py-3 text-slate-500">{t('categories.noUnits')}</li>
             )}
           </ul>
 
           <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-500">
-            <span className="font-semibold text-slate-600">Built-in (fixed): </span>
-            {DEFAULT_UNITS.map(u => `${u.unit} (${productCountByUnit.get(u.unit) || 0})`).join(' · ')}
+            <span className="font-semibold text-slate-600">{t('categories.builtIn')}</span>
+            {DEFAULT_UNITS.map(
+              u => `${u.unit} – ${tx(`unitLabel.${u.unit}`, u.label)} (${productCountByUnit.get(u.unit) || 0})`
+            ).join(' · ')}
           </div>
         </section>
       </div>
 
       <p className="text-[11px] text-slate-500">
-        Renaming a unit updates every product that uses it; bills already made keep the old text. Hidden categories
-        disappear from the product form, but products already in them keep the category.
+        {t('categories.footnote')}
       </p>
     </div>
   );

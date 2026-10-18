@@ -4,6 +4,8 @@ import { Product, ProductUnit } from '../../types';
 import { Plus, Search, Upload, FileDown, Edit3, Power, Check, AlertCircle, Tags } from 'lucide-react';
 import { CategoriesUnitsScreen } from './CategoriesUnitsScreen';
 import { allUnits, unitLabel, isLooseUnit, qtyStep, parseQty } from '../../lib/units';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { useProductName } from '../../i18n/useProductName';
 
 export const ProductsCatalogScreen: React.FC = () => {
   const {
@@ -14,11 +16,14 @@ export const ProductsCatalogScreen: React.FC = () => {
     toggleProductActive,
     importProductsCSV,
     importCustomerDuesCSV,
+    importProductNamesHiCSV,
     currentUser,
     settings,
     addCategory,
     addCustomUnit,
   } = useDairy();
+  const { t, tx, lang } = useLanguage();
+  const { productLabel, unitOf, matchesName } = useProductName();
 
   // Inline "+ New" for category and unit inside the product form (owner only)
   const [newCategoryName, setNewCategoryName] = useState<string | null>(null);
@@ -35,7 +40,7 @@ export const ProductsCatalogScreen: React.FC = () => {
     const res = await addCategory(newCategoryName);
     setIsAddingOption(false);
     if (!res.success || !res.category) {
-      setFormError(res.error || 'Failed to add category');
+      setFormError(res.error || t('products.err.addCategory'));
       return;
     }
     setCategoryId(res.category.id);
@@ -49,7 +54,7 @@ export const ProductsCatalogScreen: React.FC = () => {
     const res = await addCustomUnit(newUnitName);
     setIsAddingOption(false);
     if (!res.success) {
-      setFormError(res.error || 'Failed to add unit');
+      setFormError(res.error || t('products.err.addUnit'));
       return;
     }
     setUnit(newUnitName.trim());
@@ -65,6 +70,7 @@ export const ProductsCatalogScreen: React.FC = () => {
 
   // Form Fields
   const [name, setName] = useState('');
+  const [nameHi, setNameHi] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [sku, setSku] = useState('');
   const [barcode, setBarcode] = useState('');
@@ -79,9 +85,9 @@ export const ProductsCatalogScreen: React.FC = () => {
 
   // CSV Import Modal
   const [showCsvModal, setShowCsvModal] = useState(false);
-  const [csvType, setCsvType] = useState<'products' | 'customers'>('products');
+  const [csvType, setCsvType] = useState<'products' | 'customers' | 'namesHi'>('products');
   const [csvText, setCsvText] = useState('');
-  const [importResult, setImportResult] = useState<{ success: boolean; msg: string } | null>(null);
+  const [importResult, setImportResult] = useState<{ success: boolean; msg: string; notFound?: string[] } | null>(null);
 
   const filtered = useMemo(() => {
     return products.filter(p => {
@@ -89,18 +95,19 @@ export const ProductsCatalogScreen: React.FC = () => {
       const q = searchQuery.toLowerCase().trim();
       const matchSearch =
         !q ||
-        p.name.toLowerCase().includes(q) ||
+        matchesName(p, q) ||
         p.sku.toLowerCase().includes(q) ||
         (p.barcode && p.barcode.includes(q));
       return matchCat && matchSearch;
     });
-  }, [products, selectedCat, searchQuery]);
+  }, [products, selectedCat, searchQuery, matchesName]);
 
   const formCategories = categories.filter(c => c.active !== false || c.id === categoryId);
 
   const handleOpenAdd = () => {
     setEditingProd(null);
     setName('');
+    setNameHi('');
     setCategoryId(categories.find(c => c.active !== false)?.id || '');
     setSku(`SKU-${Date.now().toString().slice(-4)}`);
     setBarcode('');
@@ -120,6 +127,7 @@ export const ProductsCatalogScreen: React.FC = () => {
   const handleOpenEdit = (prod: Product) => {
     setEditingProd(prod);
     setName(prod.name);
+    setNameHi(prod.name_hi || '');
     setCategoryId(prod.category_id);
     setSku(prod.sku);
     setBarcode(prod.barcode || '');
@@ -141,23 +149,24 @@ export const ProductsCatalogScreen: React.FC = () => {
     setFormError(null);
 
     if (!name.trim()) {
-      setFormError('Product name is required.');
+      setFormError(t('products.err.nameRequired'));
       return;
     }
 
     if (!categoryId) {
-      setFormError('Please choose or add a category.');
+      setFormError(t('products.err.categoryRequired'));
       return;
     }
 
     if (sellingPrice < 0 || purchasePrice < 0) {
-      setFormError('Prices must be non-negative.');
+      setFormError(t('products.err.negativePrice'));
       return;
     }
 
     const res = editingProd
       ? await updateProduct(editingProd.id, {
         name: name.trim(),
+        name_hi: nameHi.trim() || undefined,
         category_id: categoryId,
         sku: sku.trim(),
         barcode: barcode.trim() || undefined,
@@ -171,6 +180,7 @@ export const ProductsCatalogScreen: React.FC = () => {
       : await addProduct(
         {
           name: name.trim(),
+          name_hi: nameHi.trim() || undefined,
           category_id: categoryId,
           sku: sku.trim(),
           barcode: barcode.trim() || undefined,
@@ -185,7 +195,7 @@ export const ProductsCatalogScreen: React.FC = () => {
         openingStock
       );
     if (!res.success) {
-      setFormError(res.error || 'Failed to save product');
+      setFormError(res.error || t('products.err.save'));
       return;
     }
 
@@ -195,36 +205,48 @@ export const ProductsCatalogScreen: React.FC = () => {
   const handleRunCSVImport = async () => {
     setImportResult(null);
     if (!csvText.trim()) {
-      setImportResult({ success: false, msg: 'Please enter or paste CSV content.' });
+      setImportResult({ success: false, msg: t('products.csv.empty') });
       return;
     }
 
     if (csvType === 'products') {
       const res = await importProductsCSV(csvText);
       if (res.success) {
-        setImportResult({ success: true, msg: `Successfully imported ${res.count} products with opening stock!` });
+        setImportResult({ success: true, msg: t('products.csv.productsDone', { count: res.count }) });
         setCsvText('');
       } else {
-        setImportResult({ success: false, msg: res.error || 'Failed to import products CSV' });
+        setImportResult({ success: false, msg: res.error || t('products.csv.productsFailed') });
       }
-    } else {
+    } else if (csvType === 'customers') {
       const res = await importCustomerDuesCSV(csvText);
       if (res.success) {
-        setImportResult({ success: true, msg: `Successfully imported ${res.count} customer accounts and opening dues!` });
+        setImportResult({ success: true, msg: t('products.csv.customersDone', { count: res.count }) });
         setCsvText('');
       } else {
-        setImportResult({ success: false, msg: res.error || 'Failed to import customers CSV' });
+        setImportResult({ success: false, msg: res.error || t('products.csv.customersFailed') });
+      }
+    } else {
+      const res = await importProductNamesHiCSV(csvText);
+      if (res.success) {
+        setImportResult({ success: true, msg: t('products.csv.namesHiDone', { count: res.count }), notFound: res.notFound });
+        setCsvText('');
+      } else {
+        setImportResult({ success: false, msg: res.error || t('products.csv.namesHiFailed'), notFound: res.notFound });
       }
     }
   };
 
   const loadSampleCSV = () => {
     if (csvType === 'products') {
-      setCsvText(`name,category,unit,purchase_price,selling_price,min_stock,track_expiry,opening_stock
-A2 Gir Cow Milk (Fresh),Fresh Milk,L,75,90,20,yes,40
-Malai Paneer Slab 1kg,Paneer & Butter,kg,340,420,5,yes,15
-Amul Butter Chiplet 100g,Paneer & Butter,pkt,52,58,15,yes,30
-Gulab Jamun Handi 1kg,Mithai & Sweets,bottle,220,280,4,no,8`);
+      setCsvText(`name,category,unit,purchase_price,selling_price,min_stock,track_expiry,opening_stock,name_hi
+A2 Gir Cow Milk (Fresh),Fresh Milk,L,75,90,20,yes,40,A2 गिर गाय का दूध (ताज़ा)
+Malai Paneer Slab 1kg,Paneer & Butter,kg,340,420,5,yes,15,मलाई पनीर 1 किलो
+Amul Butter Chiplet 100g,Paneer & Butter,pkt,52,58,15,yes,30,अमूल मक्खन चिपलेट 100 ग्राम
+Gulab Jamun Handi 1kg,Mithai & Sweets,bottle,220,280,4,no,8,गुलाब जामुन हांडी 1 किलो`);
+    } else if (csvType === 'namesHi') {
+      setCsvText(`name,name_hi
+Amul Gold Milk 500 ml Pouch,अमूल गोल्ड दूध 500 मि.ली. पाउच
+Amul Masti Dahi 400g Cup,अमूल मस्ती दही 400 ग्राम कप`);
     } else {
       setCsvText(`name,mobile,address,credit_limit,opening_due
 Aggarwal Sweet Shop,9811199988,Main Chowk,15000,4500
@@ -239,10 +261,10 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900">
-            Products & Categories Catalog
+            {t('products.title')}
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Manage dairy products, selling rates, unit configurations, and initial bulk CSV imports
+            {t('products.subtitle')}
           </p>
         </div>
 
@@ -257,7 +279,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
               className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg shadow-2xs transition-colors"
             >
               <Upload className="w-3.5 h-3.5" />
-              <span>CSV Bulk Import</span>
+              <span>{t('products.csvImport')}</span>
             </button>
           )}
 
@@ -268,7 +290,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
               className="flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-semibold rounded-lg shadow-2xs transition-colors"
             >
               <Tags className="w-4 h-4" />
-              <span>Categories & Units</span>
+              <span>{t('products.categoriesUnits')}</span>
             </button>
           )}
 
@@ -279,7 +301,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
               className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors"
             >
               <Plus className="w-4 h-4" />
-              <span>Add Product</span>
+              <span>{t('products.addProduct')}</span>
             </button>
           )}
         </div>
@@ -292,7 +314,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search product, SKU or barcode..."
+              placeholder={t('products.searchPlaceholder')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg bg-slate-50"
@@ -304,7 +326,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
             onChange={e => setSelectedCat(e.target.value)}
             className="py-1.5 px-3 border border-slate-200 rounded-lg bg-slate-50"
           >
-            <option value="all">All Categories</option>
+            <option value="all">{t('products.allCategories')}</option>
             {categories.map(c => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -314,7 +336,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
         </div>
 
         <span className="text-slate-500 font-mono-numbers text-xs self-start sm:self-auto">
-          {filtered.length} products listed
+          {t('products.listed', { count: filtered.length })}
         </span>
       </div>
 
@@ -323,33 +345,37 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-              <th className="py-3 px-4 font-semibold">Product Name</th>
-              <th className="py-3 px-4 font-semibold">SKU / Barcode</th>
-              <th className="py-3 px-4 font-semibold">Category</th>
-              <th className="py-3 px-4 font-semibold">Unit</th>
-              <th className="py-3 px-4 text-right font-semibold">Cost (₹)</th>
-              <th className="py-3 px-4 text-right font-semibold">Selling Rate (₹)</th>
-              <th className="py-3 px-4 text-right font-semibold">Current Stock</th>
-              <th className="py-3 px-4 font-semibold">Expiry Track</th>
-              <th className="py-3 px-4 text-center font-semibold">Active</th>
-              <th className="py-3 px-4 text-center font-semibold">Actions</th>
+              <th className="py-3 px-4 font-semibold">{t('products.col.name')}</th>
+              <th className="py-3 px-4 font-semibold">{t('products.col.skuBarcode')}</th>
+              <th className="py-3 px-4 font-semibold">{t('common.category')}</th>
+              <th className="py-3 px-4 font-semibold">{t('common.unit')}</th>
+              <th className="py-3 px-4 text-right font-semibold">{t('products.col.cost')}</th>
+              <th className="py-3 px-4 text-right font-semibold">{t('products.col.sellingRate')}</th>
+              <th className="py-3 px-4 text-right font-semibold">{t('products.col.currentStock')}</th>
+              <th className="py-3 px-4 font-semibold">{t('products.col.expiryTrack')}</th>
+              <th className="py-3 px-4 text-center font-semibold">{t('common.active')}</th>
+              <th className="py-3 px-4 text-center font-semibold">{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filtered.map(p => {
               const cat = categories.find(c => c.id === p.category_id);
+              const subName = lang === 'hi' && p.name_hi?.trim() ? p.name : p.name_hi?.trim();
               return (
                 <tr
                   key={p.id}
                   className={`hover:bg-slate-50 transition-colors ${!p.active ? 'opacity-50' : ''}`}
                 >
-                  <td className="py-3 px-4 font-semibold text-slate-900">{p.name}</td>
+                  <td className="py-3 px-4 font-semibold text-slate-900">
+                    {productLabel(p)}
+                    {subName && <span className="block text-[10px] font-normal text-slate-400">{subName}</span>}
+                  </td>
                   <td className="py-3 px-4 font-mono-numbers text-slate-500">
                     {p.sku}
                     {p.barcode && <span className="block text-[10px] text-slate-400">{p.barcode}</span>}
                   </td>
                   <td className="py-3 px-4 text-slate-600">{cat ? cat.name : '—'}</td>
-                  <td className="py-3 px-4 font-mono-numbers text-slate-700">{p.unit}</td>
+                  <td className="py-3 px-4 font-mono-numbers text-slate-700">{unitOf(p.unit)}</td>
                   <td className="py-3 px-4 text-right font-mono-numbers text-slate-600">
                     ₹{p.purchase_price.toFixed(2)}
                   </td>
@@ -357,15 +383,15 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                     ₹{p.selling_price.toFixed(2)}
                   </td>
                   <td className="py-3 px-4 text-right font-mono-numbers font-semibold text-slate-800">
-                    {p.current_stock} {p.unit}
+                    {p.current_stock} {unitOf(p.unit)}
                   </td>
                   <td className="py-3 px-4">
                     {p.track_expiry ? (
                       <span className="text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded text-[11px] font-medium">
-                        Yes (FIFO)
+                        {t('products.expiryYes')}
                       </span>
                     ) : (
-                      <span className="text-slate-400 text-[11px]">No</span>
+                      <span className="text-slate-400 text-[11px]">{t('common.no')}</span>
                     )}
                   </td>
                   <td className="py-3 px-4 text-center">
@@ -379,7 +405,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                           : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                       }`}
                     >
-                      {p.active ? 'Active' : 'Inactive'}
+                      {p.active ? t('common.active') : t('common.inactive')}
                     </button>
                   </td>
                   <td className="py-3 px-4 text-center">
@@ -388,7 +414,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                         type="button"
                         onClick={() => handleOpenEdit(p)}
                         className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded"
-                        title="Edit Product & Prices"
+                        title={t('products.editTitle')}
                       >
                         <Edit3 className="w-3.5 h-3.5" />
                       </button>
@@ -406,7 +432,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4 my-8 max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-slate-900 text-base">
-              {editingProd ? 'Edit Product & Pricing' : 'Add New Product'}
+              {editingProd ? t('products.form.editHeading') : t('products.form.addHeading')}
             </h3>
 
             {formError && (
@@ -418,13 +444,25 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
 
             <form onSubmit={handleSaveProduct} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Product Name *</label>
+                <label className="block text-slate-700 font-semibold mb-1">{t('products.form.name')}</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Amul Buffalo Milk 1L"
+                  placeholder={t('products.form.namePlaceholder')}
                   value={name}
                   onChange={e => setName(e.target.value)}
+                  className="w-full p-2 border border-slate-200 rounded-lg text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">{t('products.form.nameHi')}</label>
+                <input
+                  type="text"
+                  lang="hi"
+                  placeholder={t('products.form.nameHiPlaceholder')}
+                  value={nameHi}
+                  onChange={e => setNameHi(e.target.value)}
                   className="w-full p-2 border border-slate-200 rounded-lg text-xs"
                 />
               </div>
@@ -432,7 +470,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-slate-700 font-semibold">Category *</label>
+                    <label className="block text-slate-700 font-semibold">{t('products.form.category')}</label>
                     {currentUser.role === 'owner' && newCategoryName === null && (
                       <button
                         type="button"
@@ -440,7 +478,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                         className="text-[11px] text-blue-600 hover:text-blue-800 font-medium flex items-center gap-0.5"
                       >
                         <Plus className="w-3 h-3" />
-                        <span>New</span>
+                        <span>{t('products.form.new')}</span>
                       </button>
                     )}
                   </div>
@@ -450,7 +488,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                       onChange={e => setCategoryId(e.target.value)}
                       className="w-full p-2 border border-slate-200 rounded-lg bg-slate-50"
                     >
-                      {formCategories.length === 0 && <option value="">Add a category first</option>}
+                      {formCategories.length === 0 && <option value="">{t('products.form.addCategoryFirst')}</option>}
                       {formCategories.map(c => (
                         <option key={c.id} value={c.id}>
                           {c.name}
@@ -462,7 +500,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                       <input
                         type="text"
                         autoFocus
-                        placeholder="e.g. Sweets"
+                        placeholder={t('products.form.categoryPlaceholder')}
                         value={newCategoryName}
                         onChange={e => setNewCategoryName(e.target.value)}
                         onKeyDown={e => {
@@ -479,13 +517,13 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                         onClick={handleAddCategory}
                         className="px-2 bg-slate-900 text-white rounded-lg font-semibold disabled:opacity-60"
                       >
-                        Add
+                        {t('common.add')}
                       </button>
                       <button
                         type="button"
                         onClick={() => setNewCategoryName(null)}
                         className="px-1.5 text-slate-500 hover:text-slate-900"
-                        title="Cancel"
+                        title={t('common.cancel')}
                       >
                         &times;
                       </button>
@@ -495,7 +533,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-slate-700 font-semibold">Unit of Measure *</label>
+                    <label className="block text-slate-700 font-semibold">{t('products.form.unit')}</label>
                     {currentUser.role === 'owner' && newUnitName === null && (
                       <button
                         type="button"
@@ -503,7 +541,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                         className="text-[11px] text-blue-600 hover:text-blue-800 font-medium flex items-center gap-0.5"
                       >
                         <Plus className="w-3 h-3" />
-                        <span>New</span>
+                        <span>{t('products.form.new')}</span>
                       </button>
                     )}
                   </div>
@@ -515,7 +553,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                     >
                       {allUnits(settings, unit).map(u => (
                         <option key={u} value={u}>
-                          {unitLabel(u) ? `${u} (${unitLabel(u)})` : u}
+                          {unitLabel(u) ? `${u} (${tx(`unitLabel.${u}`, unitLabel(u) || u)})` : u}
                         </option>
                       ))}
                     </select>
@@ -525,7 +563,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                         type="text"
                         autoFocus
                         maxLength={12}
-                        placeholder="e.g. dozen, g, box"
+                        placeholder={t('products.form.unitPlaceholder')}
                         value={newUnitName}
                         onChange={e => setNewUnitName(e.target.value)}
                         onKeyDown={e => {
@@ -542,13 +580,13 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                         onClick={handleAddUnit}
                         className="px-2 bg-slate-900 text-white rounded-lg font-semibold disabled:opacity-60"
                       >
-                        Add
+                        {t('common.add')}
                       </button>
                       <button
                         type="button"
                         onClick={() => setNewUnitName(null)}
                         className="px-1.5 text-slate-500 hover:text-slate-900"
-                        title="Cancel"
+                        title={t('common.cancel')}
                       >
                         &times;
                       </button>
@@ -559,7 +597,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">SKU Code *</label>
+                  <label className="block text-slate-700 font-semibold mb-1">{t('products.form.sku')}</label>
                   <input
                     type="text"
                     required
@@ -570,7 +608,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Barcode (Optional)</label>
+                  <label className="block text-slate-700 font-semibold mb-1">{t('products.form.barcode')}</label>
                   <input
                     type="text"
                     placeholder="8901..."
@@ -583,7 +621,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
 
               <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Purchase Cost (₹) *</label>
+                  <label className="block text-slate-700 font-semibold mb-1">{t('products.form.purchaseCost')}</label>
                   <input
                     type="number"
                     step="0.01"
@@ -596,7 +634,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
 
                 <div>
                   <label className="block text-slate-700 font-semibold mb-1">
-                    Selling Price (₹) *
+                    {t('products.form.sellingPrice')}
                   </label>
                   <input
                     type="number"
@@ -608,7 +646,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                   />
                   {editingProd && editingProd.selling_price !== sellingPrice && (
                     <span className="text-[10px] text-amber-700 block mt-0.5">
-                      (Price change will be logged in audit trail)
+                      {t('products.form.priceChangeLogged')}
                     </span>
                   )}
                 </div>
@@ -616,7 +654,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Min Stock Alert Level</label>
+                  <label className="block text-slate-700 font-semibold mb-1">{t('products.form.minStock')}</label>
                   <input
                     type="number"
                     step={qtyStep(unit)}
@@ -629,7 +667,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">GST Rate (%)</label>
+                  <label className="block text-slate-700 font-semibold mb-1">{t('products.form.gst')}</label>
                   <input
                     type="number"
                     value={gstPercent}
@@ -642,7 +680,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
               {!editingProd && (
                 <div>
                   <label className="block text-slate-700 font-semibold mb-1">
-                    Initial Opening Stock Count ({unit})
+                    {t('products.form.openingStock', { unit: unitOf(unit) })}
                   </label>
                   <input
                     type="number"
@@ -654,7 +692,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                     className="w-full p-2 border border-slate-200 rounded-lg font-mono-numbers"
                   />
                   <span className="text-[10px] text-slate-500">
-                    Automatically writes an 'opening' stock movement into history.
+                    {t('products.form.openingStockHint')}
                   </span>
                 </div>
               )}
@@ -667,7 +705,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                     onChange={e => setTrackExpiry(e.target.checked)}
                     className="rounded text-slate-900"
                   />
-                  <span>Track expiry date alerts (FIFO) for this product</span>
+                  <span>{t('products.form.trackExpiry')}</span>
                 </label>
               </div>
 
@@ -677,13 +715,13 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                   onClick={() => setShowModal(false)}
                   className="px-3 py-1.5 text-slate-600 hover:text-slate-900"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-2 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800"
                 >
-                  {editingProd ? 'Save Changes' : 'Create Product'}
+                  {editingProd ? t('products.form.saveChanges') : t('products.form.create')}
                 </button>
               </div>
             </form>
@@ -697,9 +735,9 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
           <div className="bg-white rounded-xl shadow-2xl max-w-xl w-full p-6 space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <div>
-                <h3 className="font-bold text-slate-900 text-base">Bulk CSV Import (Go-Live Day)</h3>
+                <h3 className="font-bold text-slate-900 text-base">{t('products.csv.title')}</h3>
                 <p className="text-xs text-slate-500">
-                  Initial import of products & opening stock or customer opening credit dues
+                  {t('products.csv.subtitle')}
                 </p>
               </div>
               <button
@@ -723,7 +761,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
-                Products & Opening Stock
+                {t('products.csv.tabProducts')}
               </button>
               <button
                 type="button"
@@ -737,18 +775,36 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
-                Customer Accounts & Opening Dues
+                {t('products.csv.tabCustomers')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCsvType('namesHi');
+                  setImportResult(null);
+                }}
+                className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                  csvType === 'namesHi'
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {t('products.csv.tabNamesHi')}
               </button>
             </div>
 
+            {csvType === 'namesHi' && (
+              <p className="text-[11px] text-slate-500 leading-relaxed">{t('products.csv.namesHiHint')}</p>
+            )}
+
             <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-600 font-medium">Paste CSV lines below:</span>
+              <span className="text-slate-600 font-medium">{t('products.csv.pasteBelow')}</span>
               <button
                 type="button"
                 onClick={loadSampleCSV}
                 className="text-xs text-blue-600 hover:text-blue-800 font-semibold"
               >
-                Load Sample Template
+                {t('products.csv.loadSample')}
               </button>
             </div>
 
@@ -756,13 +812,13 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
               rows={8}
               value={csvText}
               onChange={e => setCsvText(e.target.value)}
-              placeholder="Paste comma-separated values with headers..."
+              placeholder={t('products.csv.placeholder')}
               className="w-full p-3 font-mono-numbers text-xs border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-1 focus:ring-slate-900"
             />
 
             {importResult && (
               <div
-                className={`p-3 rounded-lg text-xs flex items-center gap-2 ${
+                className={`p-3 rounded-lg text-xs flex items-start gap-2 ${
                   importResult.success
                     ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                     : 'bg-red-50 text-red-800 border border-red-200'
@@ -773,7 +829,19 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                 ) : (
                   <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
                 )}
-                <span>{importResult.msg}</span>
+                <div>
+                  <span>{importResult.msg}</span>
+                  {importResult.notFound && importResult.notFound.length > 0 && (
+                    <div className="mt-1 text-slate-700">
+                      <span className="font-semibold">
+                        {t('products.csv.notFound', { count: importResult.notFound.length })}
+                      </span>{' '}
+                      {importResult.notFound.slice(0, 10).join(', ')}
+                      {importResult.notFound.length > 10 &&
+                        ` ${t('products.csv.more', { count: importResult.notFound.length - 10 })}`}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -783,14 +851,14 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
                 onClick={() => setShowCsvModal(false)}
                 className="px-3 py-2 text-slate-600 hover:text-slate-900"
               >
-                Close
+                {t('common.close')}
               </button>
               <button
                 type="button"
                 onClick={handleRunCSVImport}
                 className="px-4 py-2 bg-slate-900 text-white font-bold rounded-lg hover:bg-slate-800"
               >
-                Parse & Import Data
+                {t('products.csv.run')}
               </button>
             </div>
           </div>
@@ -805,7 +873,7 @@ Gupta Halwai,9833377766,Subhash Nagar,10000,2800`);
               type="button"
               onClick={() => setShowCatalogSetup(false)}
               className="absolute top-3 right-4 text-slate-400 hover:text-slate-700 text-2xl font-bold"
-              title="Close"
+              title={t('common.close')}
             >
               &times;
             </button>

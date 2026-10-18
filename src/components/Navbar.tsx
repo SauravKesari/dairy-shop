@@ -21,6 +21,8 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { SHOW_DEV_TOOLS } from '../lib/firebase';
+import { useLanguage } from '../i18n/LanguageContext';
+import { LanguageToggle } from '../i18n/LanguageToggle';
 
 export type NavTab =
   | 'pos'
@@ -56,6 +58,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
     expiryAlerts,
     can,
   } = useDairy();
+  const { t, tx } = useLanguage();
 
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
@@ -64,14 +67,14 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
 
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
-      <div className="w-full px-4 sm:px-6 flex items-center justify-between gap-4 h-16">
+      <div className="w-full px-4 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 h-16">
         {/* Zone 1: Single text element wordmark (Display Face / Brand), pinned to the left */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3 min-w-0 lg:shrink-0">
           <button
             onClick={() => onSelectTab('pos')}
-            className="text-base font-extrabold tracking-tight text-slate-950 uppercase hover:text-slate-700 transition-colors flex items-center gap-2 whitespace-nowrap"
+            className="text-base font-extrabold tracking-tight text-slate-950 uppercase hover:text-slate-700 transition-colors flex items-center gap-2 whitespace-nowrap min-w-0"
           >
-            <span>{settings.shop_name}</span>
+            <span className="truncate">{settings.shop_name}</span>
           </button>
         </div>
 
@@ -87,7 +90,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             }`}
           >
             <ShoppingCart className="w-3.5 h-3.5" />
-            <span>POS Billing</span>
+            <span>{t('nav.pos')}</span>
           </button>
 
           <button
@@ -100,7 +103,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             }`}
           >
             <Receipt className="w-3.5 h-3.5" />
-            <span>Sales & Bills</span>
+            <span>{t('nav.sales')}</span>
           </button>
 
           <button
@@ -113,7 +116,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             }`}
           >
             <Boxes className="w-3.5 h-3.5" />
-            <span>Stock & Expiry</span>
+            <span>{t('nav.stock')}</span>
             {expiryAlerts.length > 0 && (
               <span className="w-2 h-2 rounded-full bg-red-500" />
             )}
@@ -129,7 +132,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             }`}
           >
             <Truck className="w-3.5 h-3.5" />
-            <span>Purchases</span>
+            <span>{t('nav.purchases')}</span>
           </button>
 
           <button
@@ -142,7 +145,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             }`}
           >
             <CreditCard className="w-3.5 h-3.5" />
-            <span>Udhaar (Credit)</span>
+            <span>{t('nav.credit')}</span>
           </button>
 
           <button
@@ -155,7 +158,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             }`}
           >
             <DollarSign className="w-3.5 h-3.5" />
-            <span>Expenses</span>
+            <span>{t('nav.expenses')}</span>
           </button>
 
           <button
@@ -168,10 +171,10 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             }`}
           >
             <Lock className="w-3.5 h-3.5" />
-            <span>Daily Closing</span>
+            <span>{t('nav.closing')}</span>
             <span
               className={`w-2 h-2 rounded-full ${isClosed ? 'bg-amber-500' : 'bg-emerald-500'}`}
-              title={isClosed ? 'Day is closed & locked' : 'Day is open'}
+              title={isClosed ? t('nav.dayClosedLocked') : t('nav.dayIsOpen')}
             />
           </button>
 
@@ -186,7 +189,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             }`}
           >
             <BarChart3 className="w-3.5 h-3.5" />
-            <span>Reports</span>
+            <span>{t('nav.reports')}</span>
           </button>
           )}
 
@@ -201,7 +204,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             }`}
           >
             <TrendingUp className="w-3.5 h-3.5" />
-            <span>Profit</span>
+            <span>{t('nav.profit')}</span>
           </button>
           )}
 
@@ -216,7 +219,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
               }`}
             >
-              <span>More</span>
+              <span>{t('nav.more')}</span>
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
 
@@ -234,7 +237,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                   className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
                 >
                   <Package className="w-4 h-4 text-slate-500" />
-                  <span>Product Catalog & CSV</span>
+                  <span>{t('nav.products')}</span>
                 </button>
 
                 {SHOW_DEV_TOOLS && (
@@ -248,7 +251,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                       className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-blue-700 font-semibold"
                     >
                       <Rocket className="w-4 h-4 text-blue-600" />
-                      <span>Deployment & Go-Live</span>
+                      <span>{t('nav.deploy')}</span>
                     </button>
 
                     <button
@@ -260,7 +263,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                       className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
                     >
                       <ClipboardCheck className="w-4 h-4 text-blue-600" />
-                      <span>Go-Live Test Runner</span>
+                      <span>{t('nav.checklist')}</span>
                     </button>
                   </>
                 )}
@@ -275,7 +278,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                     className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
                   >
                     <Tags className="w-4 h-4 text-slate-500" />
-                    <span>Categories & Units</span>
+                    <span>{t('nav.catalogSetup')}</span>
                   </button>
                 )}
 
@@ -289,7 +292,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                     className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
                   >
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>Audit Log</span>
+                    <span>{t('nav.audit')}</span>
                   </button>
                 )}
 
@@ -303,7 +306,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                     className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
                   >
                     <User className="w-4 h-4 text-slate-500" />
-                    <span>Staff & Cashiers</span>
+                    <span>{t('nav.users')}</span>
                   </button>
                 )}
 
@@ -317,7 +320,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                     className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
                   >
                     <SettingsIcon className="w-4 h-4 text-slate-500" />
-                    <span>Settings & Backup</span>
+                    <span>{t('nav.settings')}</span>
                   </button>
                 )}
               </div>
@@ -326,26 +329,28 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
         </nav>
 
         {/* Zone 3: 1-2 Primary Actions (Role Switcher & Date Status) */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Business Date Pill with Quick Open/Closed indicator */}
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono-numbers text-slate-700">
             <span>{currentBusinessDate}</span>
             <span
               className={`w-2 h-2 rounded-full ${isClosed ? 'bg-amber-500' : 'bg-emerald-500'}`}
-              title={isClosed ? 'Day Locked' : 'Day Open'}
+              title={isClosed ? t('nav.dayLocked') : t('nav.dayOpen')}
             />
           </div>
+
+          <LanguageToggle />
 
           {/* Signed-in user menu */}
           <div className="relative">
             <button
               type="button"
               onClick={() => setShowRoleMenu(!showRoleMenu)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-xs font-medium transition-colors"
             >
-              <div className="flex flex-col text-left leading-none">
-                <span className="font-bold text-slate-900">{currentUser.name}</span>
-                <span className="text-[10px] text-slate-500 capitalize">{currentUser.role}</span>
+              <div className="flex flex-col text-left leading-none min-w-0">
+                <span className="font-bold text-slate-900 truncate max-w-[4.5rem] sm:max-w-none">{currentUser.name}</span>
+                <span className="text-[10px] text-slate-500 capitalize">{tx(`role.${currentUser.role}`, currentUser.role)}</span>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
             </button>
@@ -356,7 +361,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                 onMouseLeave={() => setShowRoleMenu(false)}
               >
                 <div className="px-3 py-1 text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                  Signed in as {currentUser.mobile}
+                  {t('nav.signedInAs', { mobile: currentUser.mobile })}
                 </div>
                 <button
                   type="button"
@@ -367,7 +372,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                   className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center gap-2 text-slate-700"
                 >
                   <LogOut className="w-4 h-4 text-slate-500" />
-                  <span>Sign out</span>
+                  <span>{t('nav.signOut')}</span>
                 </button>
               </div>
             )}
@@ -383,7 +388,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             currentTab === 'pos' ? 'bg-slate-900 text-white' : 'text-slate-600'
           }`}
         >
-          POS Billing
+          {t('nav.pos')}
         </button>
         <button
           onClick={() => onSelectTab('sales')}
@@ -391,7 +396,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             currentTab === 'sales' ? 'bg-slate-900 text-white' : 'text-slate-600'
           }`}
         >
-          Bills
+          {t('nav.m.sales')}
         </button>
         <button
           onClick={() => onSelectTab('stock')}
@@ -399,7 +404,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             currentTab === 'stock' ? 'bg-slate-900 text-white' : 'text-slate-600'
           }`}
         >
-          Stock ({expiryAlerts.length})
+          {t('nav.m.stock', { count: expiryAlerts.length })}
         </button>
         <button
           onClick={() => onSelectTab('purchases')}
@@ -407,7 +412,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             currentTab === 'purchases' ? 'bg-slate-900 text-white' : 'text-slate-600'
           }`}
         >
-          Inward
+          {t('nav.m.purchases')}
         </button>
         <button
           onClick={() => onSelectTab('credit')}
@@ -415,7 +420,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             currentTab === 'credit' ? 'bg-slate-900 text-white' : 'text-slate-600'
           }`}
         >
-          Udhaar
+          {t('nav.m.credit')}
         </button>
         <button
           onClick={() => onSelectTab('expenses')}
@@ -423,7 +428,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             currentTab === 'expenses' ? 'bg-slate-900 text-white' : 'text-slate-600'
           }`}
         >
-          Expenses
+          {t('nav.expenses')}
         </button>
         <button
           onClick={() => onSelectTab('closing')}
@@ -431,7 +436,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             currentTab === 'closing' ? 'bg-slate-900 text-white' : 'text-slate-600'
           }`}
         >
-          Closing
+          {t('nav.m.closing')}
         </button>
         {can('view_reports') && (
         <button
@@ -440,7 +445,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             currentTab === 'reports' ? 'bg-slate-900 text-white' : 'text-slate-600'
           }`}
         >
-          Reports
+          {t('nav.reports')}
         </button>
         )}
         {can('view_profit') && (
@@ -450,7 +455,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             currentTab === 'profit' ? 'bg-slate-900 text-white' : 'text-slate-600'
           }`}
         >
-          Profit
+          {t('nav.profit')}
         </button>
         )}
         <button
@@ -459,7 +464,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
             currentTab === 'products' ? 'bg-slate-900 text-white' : 'text-slate-600'
           }`}
         >
-          Products
+          {t('nav.m.products')}
         </button>
         {SHOW_DEV_TOOLS && (
           <>
@@ -469,7 +474,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                 currentTab === 'deploy' ? 'bg-slate-900 text-white' : 'text-slate-600'
               }`}
             >
-              Deploy
+              {t('nav.m.deploy')}
             </button>
             <button
               onClick={() => onSelectTab('checklist')}
@@ -477,7 +482,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab }) => {
                 currentTab === 'checklist' ? 'bg-slate-900 text-white' : 'text-slate-600'
               }`}
             >
-              Acceptance Tests
+              {t('nav.m.checklist')}
             </button>
           </>
         )}

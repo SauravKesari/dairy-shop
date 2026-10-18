@@ -1,9 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { useDairy } from '../../context/DairyContext';
 import { ShieldCheck, Search, Filter, Calendar } from 'lucide-react';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 export const AuditLogScreen: React.FC = () => {
   const { auditLogs, currentUser } = useDairy();
+  const { t } = useLanguage();
   const [filterAction, setFilterAction] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -31,15 +33,15 @@ export const AuditLogScreen: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-emerald-600" />
-            <span>Security & Sensitive Actions Audit Trail</span>
+            <span>{t('audit.title')}</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Permanent system audit log tracking bill cancellations, stock adjustments, price changes, and day re-opens
+            {t('audit.subtitle')}
           </p>
         </div>
 
         <div className="text-xs text-slate-500 font-mono-numbers bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-2xs">
-          {auditLogs.length} Audited Events
+          {t('audit.eventCount', { count: auditLogs.length })}
         </div>
       </div>
 
@@ -50,7 +52,7 @@ export const AuditLogScreen: React.FC = () => {
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
-              placeholder="Search audit trail..."
+              placeholder={t('audit.searchPh')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg bg-slate-50"
@@ -62,7 +64,7 @@ export const AuditLogScreen: React.FC = () => {
             onChange={e => setFilterAction(e.target.value)}
             className="py-1.5 px-3 border border-slate-200 rounded-lg bg-slate-50"
           >
-            <option value="all">All Actions</option>
+            <option value="all">{t('audit.allActions')}</option>
             {uniqueActions.map(act => (
               <option key={act} value={act}>
                 {act.replace('_', ' ')}
@@ -76,7 +78,7 @@ export const AuditLogScreen: React.FC = () => {
             onClick={() => setFilterAction('all')}
             className="text-xs text-blue-600 hover:text-blue-800 font-medium"
           >
-            Show All Events
+            {t('audit.showAll')}
           </button>
         )}
       </div>
@@ -86,11 +88,11 @@ export const AuditLogScreen: React.FC = () => {
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-              <th className="py-3 px-4 font-semibold">Timestamp</th>
-              <th className="py-3 px-4 font-semibold">User</th>
-              <th className="py-3 px-4 font-semibold">Action Triggered</th>
-              <th className="py-3 px-4 font-semibold">Entity Type</th>
-              <th className="py-3 px-4 font-semibold">Details & Reason</th>
+              <th className="py-3 px-4 font-semibold">{t('audit.timestamp')}</th>
+              <th className="py-3 px-4 font-semibold">{t('audit.user')}</th>
+              <th className="py-3 px-4 font-semibold">{t('audit.action')}</th>
+              <th className="py-3 px-4 font-semibold">{t('audit.entity')}</th>
+              <th className="py-3 px-4 font-semibold">{t('audit.details')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-mono-numbers">

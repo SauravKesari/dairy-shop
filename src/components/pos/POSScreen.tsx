@@ -4,6 +4,8 @@ import { Product, PaymentMethod, Sale } from '../../types';
 import { ReceiptModal } from './ReceiptModal';
 import { UpiPaymentModal } from './UpiPaymentModal';
 import { isLooseUnit } from '../../lib/units';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { useProductName } from '../../i18n/useProductName';
 import {
   Search,
   ShoppingCart,
@@ -40,6 +42,8 @@ export const POSScreen: React.FC = () => {
     isDateClosed,
     can,
   } = useDairy();
+  const { t } = useLanguage();
+  const { productLabel, unitOf, matchesName } = useProductName();
 
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -73,12 +77,12 @@ export const POSScreen: React.FC = () => {
       const query = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !query ||
-        p.name.toLowerCase().includes(query) ||
+        matchesName(p, query) ||
         p.sku.toLowerCase().includes(query) ||
         (p.barcode && p.barcode.includes(query));
       return matchesCat && matchesSearch;
     });
-  }, [activeProducts, selectedCategory, searchQuery]);
+  }, [activeProducts, selectedCategory, searchQuery, matchesName]);
 
   const selectedCustomer = useMemo(() => {
     return customers.find(c => c.id === selectedCustomerId);
@@ -97,7 +101,12 @@ export const POSScreen: React.FC = () => {
       // Stock check
       if (!settings.allow_negative_stock && targetQty > product.current_stock) {
         setErrorBanner(
-          `Cannot add ${targetQty} ${product.unit} of ${product.name}. Only ${product.current_stock} ${product.unit} available in stock!`
+          t('pos.err.cannotAdd', {
+            qty: targetQty,
+            unit: unitOf(product.unit),
+            name: productLabel(product),
+            stock: product.current_stock,
+          })
         );
         return prev;
       }
@@ -132,7 +141,11 @@ export const POSScreen: React.FC = () => {
 
     if (!settings.allow_negative_stock && newQty > product.current_stock) {
       setErrorBanner(
-        `Insufficient stock! Max available for ${product.name} is ${product.current_stock} ${product.unit}`
+        t('pos.err.insufficient', {
+          name: productLabel(product),
+          stock: product.current_stock,
+          unit: unitOf(product.unit),
+        })
       );
       return;
     }
@@ -183,19 +196,22 @@ export const POSScreen: React.FC = () => {
     setErrorBanner(null);
 
     if (cart.length === 0) {
-      setErrorBanner('Cart is empty. Please add items to bill.');
+      setErrorBanner(t('pos.err.cartEmpty'));
       return;
     }
 
     if (isCashierDiscountExceeded) {
       setErrorBanner(
-        `Cashier discount limit is ${settings.cashier_max_discount_percent}%. Applied discount is ${discountPercent.toFixed(1)}%. Reduce discount or switch to Owner.`
+        t('pos.err.discountLimit', {
+          max: settings.cashier_max_discount_percent,
+          pct: discountPercent.toFixed(1),
+        })
       );
       return;
     }
 
     if (paymentMethod === 'credit' && !selectedCustomerId) {
-      setErrorBanner('Please select a customer for Udhaar (Credit) sale.');
+      setErrorBanner(t('pos.err.selectCustomer'));
       return;
     }
 
@@ -204,8 +220,8 @@ export const POSScreen: React.FC = () => {
       if (!settings.upi_id) {
         setErrorBanner(
           currentUser.role === 'owner'
-            ? 'UPI ID is not set. Add it in Settings to show the payment QR.'
-            : 'UPI ID is not set. Ask the Owner to add it in Settings.'
+            ? t('pos.err.upiOwner')
+            : t('pos.err.upiCashier')
         );
         return;
       }
@@ -236,7 +252,7 @@ export const POSScreen: React.FC = () => {
     setShowUpiModal(false);
 
     if (!saleResult.success) {
-      setErrorBanner(saleResult.error || 'Failed to complete sale');
+      setErrorBanner(saleResult.error || t('pos.err.saleFailed'));
       return;
     }
 
@@ -260,7 +276,7 @@ export const POSScreen: React.FC = () => {
       credit_limit: limit,
     });
     if (!res.success || !res.customer) {
-      setErrorBanner(res.error || 'Failed to add customer');
+      setErrorBanner(res.error || t('pos.err.addCustomerFailed'));
       return;
     }
 
@@ -282,7 +298,7 @@ export const POSScreen: React.FC = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search product by name, SKU or barcode..."
+                placeholder={t('pos.searchPlaceholder')}
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-800 transition-all"
@@ -292,7 +308,7 @@ export const POSScreen: React.FC = () => {
                   onClick={() => setSearchQuery('')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-700"
                 >
-                  Clear
+                  {t('pos.clear')}
                 </button>
               )}
             </div>
@@ -306,29 +322,29 @@ export const POSScreen: React.FC = () => {
                   ? 'bg-amber-100 border-amber-300 text-amber-900'
                   : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
-              title="Record handwritten carbon-copy bills from internet/power outages"
+              title={t('pos.paperBillTitle')}
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>{isOfflineEntry ? 'Offline Bill Mode' : 'Paper Bill Entry'}</span>
+              <span>{isOfflineEntry ? t('pos.offlineBillMode') : t('pos.paperBillEntry')}</span>
             </button>
           </div>
 
           {/* Offline Entry Settings Bar */}
           {isOfflineEntry && (
             <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg flex flex-wrap items-center gap-3 text-xs">
-              <span className="font-semibold text-amber-900">Paper Bill Outage Mode:</span>
+              <span className="font-semibold text-amber-900">{t('pos.outageMode')}</span>
               <div className="flex items-center gap-1.5">
-                <label className="text-slate-600">Bill Book #:</label>
+                <label className="text-slate-600">{t('pos.billBookNo')}</label>
                 <input
                   type="text"
-                  placeholder="e.g. BOOK-3/42"
+                  placeholder={t('pos.billBookPlaceholder')}
                   value={offlineBillRef}
                   onChange={e => setOfflineBillRef(e.target.value)}
                   className="px-2 py-1 bg-white border border-amber-300 rounded text-xs w-28"
                 />
               </div>
               <div className="flex items-center gap-1.5">
-                <label className="text-slate-600">Original Date:</label>
+                <label className="text-slate-600">{t('pos.originalDate')}</label>
                 <input
                   type="date"
                   value={offlineDate}
@@ -337,7 +353,7 @@ export const POSScreen: React.FC = () => {
                 />
               </div>
               <span className="text-[11px] text-amber-700">
-                (Will mark bill as offline entry for audit integrity)
+                {t('pos.offlineAuditNote')}
               </span>
             </div>
           )}
@@ -352,7 +368,7 @@ export const POSScreen: React.FC = () => {
                   : 'bg-slate-100 text-slate-600 hover:text-slate-900'
               }`}
             >
-              All Items ({activeProducts.length})
+              {t('pos.allItems', { count: activeProducts.length })}
             </button>
             {categories.map(cat => {
               const count = activeProducts.filter(p => p.category_id === cat.id).length;
@@ -378,7 +394,7 @@ export const POSScreen: React.FC = () => {
           {filteredProducts.length === 0 ? (
             <div className="h-48 flex flex-col items-center justify-center text-slate-400 text-sm">
               <Search className="w-8 h-8 mb-2 opacity-50" />
-              <p>No products match your search or filter.</p>
+              <p>{t('pos.noProducts')}</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -401,7 +417,7 @@ export const POSScreen: React.FC = () => {
                     <div>
                       {/* Name & SKU */}
                       <h4 className="font-semibold text-slate-900 text-sm leading-snug line-clamp-2">
-                        {product.name}
+                        {productLabel(product)}
                       </h4>
                       <p className="text-[11px] font-mono-numbers text-slate-400 mt-0.5">
                         {product.sku}
@@ -413,7 +429,7 @@ export const POSScreen: React.FC = () => {
                         <span className="text-base font-extrabold text-slate-900 font-mono-numbers">
                           ₹{product.selling_price}
                         </span>
-                        <span className="text-xs text-slate-500">/{product.unit}</span>
+                        <span className="text-xs text-slate-500">/{unitOf(product.unit)}</span>
                       </div>
 
                       {/* Stock level badge */}
@@ -427,11 +443,11 @@ export const POSScreen: React.FC = () => {
                               : 'text-slate-500'
                           }`}
                         >
-                          Stock: {product.current_stock} {product.unit}
+                          {t('pos.stock', { qty: product.current_stock, unit: unitOf(product.unit) })}
                         </span>
                         {inCart && (
                           <span className="font-semibold text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded font-mono-numbers text-[10px]">
-                            In Cart: {inCart.qty}
+                            {t('pos.inCart', { qty: inCart.qty })}
                           </span>
                         )}
                       </div>
@@ -461,7 +477,7 @@ export const POSScreen: React.FC = () => {
                             onClick={() => addToCart(product, 1.0)}
                             className="py-1 text-[10px] font-medium bg-slate-900 hover:bg-slate-800 text-white rounded transition-colors"
                           >
-                            +1 {product.unit}
+                            +1 {unitOf(product.unit)}
                           </button>
                         </div>
                       ) : (
@@ -472,7 +488,7 @@ export const POSScreen: React.FC = () => {
                           className="w-full mt-2 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 hover:bg-slate-800 text-white transition-colors flex items-center justify-center gap-1 disabled:bg-slate-300 disabled:cursor-not-allowed"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>Add to Cart</span>
+                          <span>{t('pos.addToCart')}</span>
                         </button>
                       )}
                     </div>
@@ -490,9 +506,9 @@ export const POSScreen: React.FC = () => {
         <div className="p-4 border-b border-slate-200 bg-white flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-slate-800" />
-            <h3 className="font-bold text-slate-900 text-base">Current Bill</h3>
+            <h3 className="font-bold text-slate-900 text-base">{t('pos.currentBill')}</h3>
             <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono-numbers">
-              {cart.length} items
+              {t('pos.itemsCount', { count: cart.length })}
             </span>
           </div>
 
@@ -503,7 +519,7 @@ export const POSScreen: React.FC = () => {
               className="text-xs text-red-600 hover:text-red-700 font-medium flex items-center gap-1"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Clear</span>
+              <span>{t('pos.clear')}</span>
             </button>
           )}
         </div>
@@ -513,7 +529,7 @@ export const POSScreen: React.FC = () => {
           <div className="p-3 bg-red-50 border-b border-red-200 text-red-800 text-xs flex items-center gap-2">
             <Lock className="w-4 h-4 text-red-600 shrink-0" />
             <span>
-              <strong>Day is closed & locked.</strong> {currentUser.role === 'cashier' ? 'Cashiers cannot bill on closed dates.' : 'Owner re-open required to bill.'}
+              <strong>{t('pos.dayClosed')}</strong> {currentUser.role === 'cashier' ? t('pos.dayClosedCashier') : t('pos.dayClosedOwner')}
             </span>
           </div>
         )}
@@ -537,8 +553,8 @@ export const POSScreen: React.FC = () => {
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 text-sm">
               <ShoppingCart className="w-10 h-10 mb-2 stroke-1 opacity-40" />
-              <p className="font-medium text-slate-500">Cart is empty</p>
-              <p className="text-xs text-slate-400 mt-1">Tap products on the left to add items</p>
+              <p className="font-medium text-slate-500">{t('pos.cartEmpty')}</p>
+              <p className="text-xs text-slate-400 mt-1">{t('pos.cartEmptyHint')}</p>
             </div>
           ) : (
             cart.map(item => (
@@ -549,10 +565,10 @@ export const POSScreen: React.FC = () => {
                 <div className="flex justify-between items-start">
                   <div className="flex-1 pr-2">
                     <h5 className="text-xs font-semibold text-slate-900 leading-snug">
-                      {item.product.name}
+                      {productLabel(item.product)}
                     </h5>
                     <p className="text-[11px] text-slate-500 font-mono-numbers">
-                      ₹{item.unit_price} / {item.product.unit}
+                      ₹{item.unit_price} / {unitOf(item.product.unit)}
                     </p>
                   </div>
                   <div className="text-right">
@@ -588,7 +604,7 @@ export const POSScreen: React.FC = () => {
                       className="w-16 text-center font-mono-numbers text-xs font-semibold bg-slate-50 border border-slate-200 rounded py-0.5 focus:outline-none focus:ring-1 focus:ring-slate-900"
                     />
 
-                    <span className="text-[11px] text-slate-500 mr-1">{item.product.unit}</span>
+                    <span className="text-[11px] text-slate-500 mr-1">{unitOf(item.product.unit)}</span>
 
                     <button
                       type="button"
@@ -621,7 +637,7 @@ export const POSScreen: React.FC = () => {
             <div className="flex items-center justify-between text-xs">
               <label className="font-semibold text-slate-700 flex items-center gap-1">
                 <UserCheck className="w-3.5 h-3.5 text-slate-500" />
-                <span>Customer (Udhaar / Credit):</span>
+                <span>{t('pos.customerLabel')}</span>
               </label>
               {can('add_customers') && (
               <button
@@ -630,7 +646,7 @@ export const POSScreen: React.FC = () => {
                 className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-0.5"
               >
                 <UserPlus className="w-3 h-3" />
-                <span>New Customer</span>
+                <span>{t('pos.newCustomer')}</span>
               </button>
               )}
             </div>
@@ -640,10 +656,11 @@ export const POSScreen: React.FC = () => {
               onChange={e => setSelectedCustomerId(e.target.value)}
               className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-slate-900"
             >
-              <option value="">Direct Retail Customer (No Udhaar Account)</option>
+              <option value="">{t('pos.directCustomer')}</option>
               {customers.map(cust => (
                 <option key={cust.id} value={cust.id}>
-                  {cust.name} — Current Dues: ₹{cust.current_dues} {cust.credit_limit ? `(Limit ₹${cust.credit_limit})` : ''}
+                  {t('pos.customerOption', { name: cust.name, dues: cust.current_dues })}{' '}
+                  {cust.credit_limit ? t('pos.customerOptionLimit', { limit: cust.credit_limit }) : ''}
                 </option>
               ))}
             </select>
@@ -651,11 +668,11 @@ export const POSScreen: React.FC = () => {
             {selectedCustomer && (
               <div className="p-2 bg-amber-50/70 border border-amber-200 rounded-md text-[11px] flex justify-between items-center text-amber-900">
                 <span>
-                  Existing Balance: <strong>₹{selectedCustomer.current_dues}</strong>
+                  {t('pos.existingBalance')} <strong>₹{selectedCustomer.current_dues}</strong>
                 </span>
                 {selectedCustomer.credit_limit && (
                   <span>
-                    Limit: <strong>₹{selectedCustomer.credit_limit}</strong>
+                    {t('pos.limit')} <strong>₹{selectedCustomer.credit_limit}</strong>
                   </span>
                 )}
               </div>
@@ -664,7 +681,7 @@ export const POSScreen: React.FC = () => {
 
           {/* Payment Method Segmented Buttons */}
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-700">Payment Mode:</label>
+            <label className="text-xs font-semibold text-slate-700">{t('pos.paymentMode')}</label>
             <div className={`grid gap-1 ${can('give_credit') ? 'grid-cols-4' : 'grid-cols-3'}`}>
               <button
                 type="button"
@@ -676,7 +693,7 @@ export const POSScreen: React.FC = () => {
                 }`}
               >
                 <Banknote className="w-4 h-4 mb-0.5" />
-                <span>Cash</span>
+                <span>{t('payment.cash')}</span>
               </button>
 
               <button
@@ -689,7 +706,7 @@ export const POSScreen: React.FC = () => {
                 }`}
               >
                 <QrCode className="w-4 h-4 mb-0.5" />
-                <span>UPI / QR</span>
+                <span>{t('pos.upiQr')}</span>
               </button>
 
               <button
@@ -702,7 +719,7 @@ export const POSScreen: React.FC = () => {
                 }`}
               >
                 <CreditCard className="w-4 h-4 mb-0.5" />
-                <span>Card</span>
+                <span>{t('payment.card')}</span>
               </button>
 
               {can('give_credit') && (
@@ -716,7 +733,7 @@ export const POSScreen: React.FC = () => {
                 }`}
               >
                 <Receipt className="w-4 h-4 mb-0.5" />
-                <span>Udhaar</span>
+                <span>{t('payment.credit')}</span>
               </button>
               )}
             </div>
@@ -725,7 +742,7 @@ export const POSScreen: React.FC = () => {
           {/* Discount & Totals */}
           <div className="space-y-2 pt-2 border-t border-slate-100 text-xs">
             <div className="flex items-center justify-between text-slate-600">
-              <span>Subtotal:</span>
+              <span>{t('pos.subtotal')}</span>
               <span className="font-mono-numbers font-medium text-slate-900">
                 ₹{subtotal.toFixed(2)}
               </span>
@@ -733,10 +750,10 @@ export const POSScreen: React.FC = () => {
 
             <div className="flex items-center justify-between">
               <span className="text-slate-600">
-                Discount (₹):
+                {t('pos.discount')}
                 {currentUser.role === 'cashier' && (
                   <span className="text-[10px] text-slate-400 ml-1">
-                    (Max {settings.cashier_max_discount_percent}%)
+                    {t('pos.maxDiscount', { pct: settings.cashier_max_discount_percent })}
                   </span>
                 )}
               </span>
@@ -757,13 +774,13 @@ export const POSScreen: React.FC = () => {
 
             {isCashierDiscountExceeded && (
               <p className="text-[10px] text-red-600 text-right">
-                Discount exceeds Cashier limit ({settings.cashier_max_discount_percent}%)
+                {t('pos.discountExceeded', { pct: settings.cashier_max_discount_percent })}
               </p>
             )}
 
             {settings.gst_enabled && (
               <div className="flex items-center justify-between text-slate-600">
-                <span>GST ({settings.default_gst_percent}%):</span>
+                <span>{t('pos.gst', { pct: settings.default_gst_percent })}</span>
                 <span className="font-mono-numbers">₹{taxAmount.toFixed(2)}</span>
               </div>
             )}
@@ -771,7 +788,7 @@ export const POSScreen: React.FC = () => {
             {/* Total Payable Box */}
             <div className="flex items-center justify-between p-3 bg-slate-900 text-white rounded-xl">
               <div>
-                <span className="text-xs text-slate-400 block">TOTAL PAYABLE</span>
+                <span className="text-xs text-slate-400 block">{t('pos.totalPayable')}</span>
                 <span className="text-2xl font-extrabold font-mono-numbers tracking-tight">
                   ₹{totalPayable.toFixed(2)}
                 </span>
@@ -783,7 +800,7 @@ export const POSScreen: React.FC = () => {
                 onClick={handleCheckout}
                 className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold rounded-lg transition-all shadow-md disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed"
               >
-                {isCheckingOut ? 'Saving…' : 'Complete Bill (Enter)'}
+                {isCheckingOut ? t('pos.saving') : t('pos.completeBill')}
               </button>
             </div>
           </div>
@@ -794,21 +811,21 @@ export const POSScreen: React.FC = () => {
       {showAddCustomerModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
           <div className="bg-white rounded-xl p-5 max-w-sm w-full shadow-xl">
-            <h4 className="text-sm font-bold text-slate-900 mb-3">Add Udhaar Customer</h4>
+            <h4 className="text-sm font-bold text-slate-900 mb-3">{t('pos.addCustomerTitle')}</h4>
             <form onSubmit={handleQuickAddCustomer} className="space-y-3 text-xs">
               <div>
-                <label className="text-slate-600 font-medium block mb-1">Customer Name *</label>
+                <label className="text-slate-600 font-medium block mb-1">{t('pos.customerName')}</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Ramesh Chai Stall"
+                  placeholder={t('pos.customerNamePlaceholder')}
                   value={newCustName}
                   onChange={e => setNewCustName(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-200 rounded-lg"
                 />
               </div>
               <div>
-                <label className="text-slate-600 font-medium block mb-1">Mobile Number</label>
+                <label className="text-slate-600 font-medium block mb-1">{t('pos.mobile')}</label>
                 <input
                   type="tel"
                   placeholder="98XXXXXXXX"
@@ -818,10 +835,10 @@ export const POSScreen: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="text-slate-600 font-medium block mb-1">Credit Limit (₹)</label>
+                <label className="text-slate-600 font-medium block mb-1">{t('pos.creditLimit')}</label>
                 <input
                   type="number"
-                  placeholder="e.g. 5000 (optional)"
+                  placeholder={t('pos.creditLimitPlaceholder')}
                   value={newCustLimit}
                   onChange={e => setNewCustLimit(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-200 rounded-lg"
@@ -833,13 +850,13 @@ export const POSScreen: React.FC = () => {
                   onClick={() => setShowAddCustomerModal(false)}
                   className="px-3 py-1.5 text-slate-600 hover:text-slate-900"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-1.5 bg-slate-900 text-white font-medium rounded-lg hover:bg-slate-800"
                 >
-                  Save Customer
+                  {t('pos.saveCustomer')}
                 </button>
               </div>
             </form>

@@ -4,6 +4,8 @@ import { doc, getDoc, writeBatch } from 'firebase/firestore';
 import { LogIn, Store, AlertCircle, Loader2 } from 'lucide-react';
 import { auth, db, mobileToEmail, friendlyFirebaseError, MIN_PIN_LENGTH } from '../../lib/firebase';
 import { initialSettings } from '../../data/initialData';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { LanguageToggle } from '../../i18n/LanguageToggle';
 
 export type AuthStatus = 'loading' | 'signed_out' | 'no_profile' | 'inactive';
 
@@ -12,6 +14,7 @@ const inputClass =
 
 // Kept mounted across auth changes, so first-time setup can finish writing the owner profile
 export const LoginScreen: React.FC<{ status: AuthStatus }> = ({ status }) => {
+  const { t } = useLanguage();
   const [isSetupDone, setIsSetupDone] = useState<boolean | null>(null);
   const [mode, setMode] = useState<'login' | 'setup'>('login');
   const [busy, setBusy] = useState(false);
@@ -49,7 +52,7 @@ export const LoginScreen: React.FC<{ status: AuthStatus }> = ({ status }) => {
     e.preventDefault();
     setError(null);
     if (pin.length < MIN_PIN_LENGTH) {
-      setError(`PIN must be at least ${MIN_PIN_LENGTH} digits.`);
+      setError(t('err.weakPin', { min: MIN_PIN_LENGTH }));
       return;
     }
     setBusy(true);
@@ -95,7 +98,7 @@ export const LoginScreen: React.FC<{ status: AuthStatus }> = ({ status }) => {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center text-sm text-slate-500 gap-2 font-sans">
         <Loader2 className="w-4 h-4 animate-spin" />
-        <span>Loading…</span>
+        <span>{t('common.loading')}</span>
       </div>
     );
   }
@@ -106,12 +109,15 @@ export const LoginScreen: React.FC<{ status: AuthStatus }> = ({ status }) => {
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 font-sans text-slate-900">
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm w-full max-w-sm p-6 space-y-5">
         <div className="space-y-1">
-          <h1 className="text-lg font-extrabold tracking-tight flex items-center gap-2">
-            <Store className="w-5 h-5" />
-            <span>Dairy Parlour</span>
-          </h1>
+          <div className="flex items-center justify-between gap-2">
+            <h1 className="text-lg font-extrabold tracking-tight flex items-center gap-2">
+              <Store className="w-5 h-5" />
+              <span>{t('login.title')}</span>
+            </h1>
+            <LanguageToggle />
+          </div>
           <p className="text-xs text-slate-500">
-            {mode === 'setup' ? 'First-time setup: create the shop owner account' : 'Sign in with your mobile number and PIN'}
+            {mode === 'setup' ? t('login.subtitleSetup') : t('login.subtitle')}
           </p>
         </div>
 
@@ -126,15 +132,15 @@ export const LoginScreen: React.FC<{ status: AuthStatus }> = ({ status }) => {
           <div className="space-y-3 text-xs">
             <p className="p-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg">
               {status === 'inactive'
-                ? 'This account has been deactivated. Ask the shop owner to re-activate it.'
-                : 'This login has no staff profile in this shop. Ask the shop owner to add you from the Users screen.'}
+                ? t('login.deactivated')
+                : t('login.noProfile')}
             </p>
             <button
               type="button"
               onClick={() => signOut(auth)}
               className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-lg"
             >
-              Sign out
+              {t('login.signOut')}
             </button>
           </div>
         ) : (
@@ -142,17 +148,17 @@ export const LoginScreen: React.FC<{ status: AuthStatus }> = ({ status }) => {
             {mode === 'setup' && (
               <>
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Shop name *</label>
+                  <label className="block text-slate-700 font-semibold mb-1">{t('login.shopName')}</label>
                   <input required value={shopName} onChange={e => setShopName(e.target.value)} className={inputClass} />
                 </div>
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Owner name *</label>
+                  <label className="block text-slate-700 font-semibold mb-1">{t('login.ownerName')}</label>
                   <input required value={ownerName} onChange={e => setOwnerName(e.target.value)} className={inputClass} />
                 </div>
               </>
             )}
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">Mobile number *</label>
+              <label className="block text-slate-700 font-semibold mb-1">{t('login.mobile')}</label>
               <input
                 required
                 type="tel"
@@ -165,7 +171,7 @@ export const LoginScreen: React.FC<{ status: AuthStatus }> = ({ status }) => {
             </div>
             <div>
               <label className="block text-slate-700 font-semibold mb-1">
-                PIN * {mode === 'setup' && <span className="font-normal text-slate-500">(at least {MIN_PIN_LENGTH} digits)</span>}
+                {t('login.pin')} {mode === 'setup' && <span className="font-normal text-slate-500">{t('login.pinHint', { min: MIN_PIN_LENGTH })}</span>}
               </label>
               <input
                 required
@@ -183,7 +189,7 @@ export const LoginScreen: React.FC<{ status: AuthStatus }> = ({ status }) => {
               className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white font-semibold rounded-lg flex items-center justify-center gap-2"
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogIn className="w-4 h-4" />}
-              <span>{mode === 'setup' ? 'Create owner account' : 'Sign in'}</span>
+              <span>{mode === 'setup' ? t('login.createOwner') : t('login.signIn')}</span>
             </button>
             {isSetupDone === false && (
               <button
@@ -191,7 +197,7 @@ export const LoginScreen: React.FC<{ status: AuthStatus }> = ({ status }) => {
                 onClick={() => setMode(mode === 'setup' ? 'login' : 'setup')}
                 className="w-full text-center text-slate-500 hover:text-slate-900 underline"
               >
-                {mode === 'setup' ? 'Already set up? Sign in' : 'First time? Set up the shop'}
+                {mode === 'setup' ? t('login.alreadySetUp') : t('login.firstTime')}
               </button>
             )}
           </form>

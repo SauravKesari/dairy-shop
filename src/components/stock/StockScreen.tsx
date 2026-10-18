@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useDairy } from '../../context/DairyContext';
 import { Product, StockMovement } from '../../types';
 import { isLooseUnit, qtyStep, parseQty } from '../../lib/units';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { useProductName } from '../../i18n/useProductName';
 import {
   Boxes,
   AlertTriangle,
@@ -24,6 +26,8 @@ export const StockScreen: React.FC = () => {
     currentUser,
     adjustStock,
   } = useDairy();
+  const { t, tx } = useLanguage();
+  const { productLabel, nameOf, unitOf, matchesName } = useProductName();
 
   const [activeTab, setActiveTab] = useState<'inventory' | 'expiry' | 'movements'>('inventory');
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,11 +62,11 @@ export const StockScreen: React.FC = () => {
       const query = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !query ||
-        p.name.toLowerCase().includes(query) ||
+        matchesName(p, query) ||
         p.sku.toLowerCase().includes(query);
       return matchesCat && matchesLow && matchesSearch;
     });
-  }, [products, selectedCategory, lowStockOnly, searchQuery]);
+  }, [products, selectedCategory, lowStockOnly, searchQuery, matchesName]);
 
   const filteredExpiryAlerts = useMemo(() => {
     return expiryAlerts.filter(a => {
@@ -83,7 +87,7 @@ export const StockScreen: React.FC = () => {
 
     const res = await adjustStock(adjustingProduct.id, adjustType, signedQty, adjustReason);
     if (!res.success) {
-      setAdjustError(res.error || 'Failed to adjust stock');
+      setAdjustError(res.error || t('stock.adjustFailed'));
       return;
     }
 
@@ -98,10 +102,10 @@ export const StockScreen: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900">
-            Stock & Inventory Management
+            {t('stock.title')}
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Real-time stock built strictly from movements, FIFO expiry tracking, valuation at cost & audited adjustments
+            {t('stock.subtitle')}
           </p>
         </div>
 
@@ -116,7 +120,7 @@ export const StockScreen: React.FC = () => {
             }`}
           >
             <Boxes className="w-3.5 h-3.5" />
-            <span>Current Stock</span>
+            <span>{t('stock.tab.inventory')}</span>
           </button>
           <button
             onClick={() => setActiveTab('expiry')}
@@ -127,7 +131,7 @@ export const StockScreen: React.FC = () => {
             }`}
           >
             <Clock className="w-3.5 h-3.5" />
-            <span>Expiry Alerts ({expiringCount})</span>
+            <span>{t('stock.tab.expiry', { count: expiringCount })}</span>
           </button>
           <button
             onClick={() => setActiveTab('movements')}
@@ -138,7 +142,7 @@ export const StockScreen: React.FC = () => {
             }`}
           >
             <History className="w-3.5 h-3.5" />
-            <span>Stock Movements Ledger</span>
+            <span>{t('stock.tab.movements')}</span>
           </button>
         </div>
       </div>
@@ -146,21 +150,21 @@ export const StockScreen: React.FC = () => {
       {/* KPI Cards Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-xs text-slate-500 block">Total Inventory Value (Cost)</span>
+          <span className="text-xs text-slate-500 block">{t('stock.kpi.value')}</span>
           <span className="text-2xl font-bold font-mono-numbers text-slate-900 mt-1 block">
             ₹{totalValuationCost.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </span>
           <span className="text-[11px] text-slate-400 mt-0.5 block">
-            Across {totalSKUs} active product lines
+            {t('stock.kpi.valueHint', { count: totalSKUs })}
           </span>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-xs text-slate-500 block">Total Volume / Units</span>
+          <span className="text-xs text-slate-500 block">{t('stock.kpi.units')}</span>
           <span className="text-2xl font-bold font-mono-numbers text-slate-900 mt-1 block">
             {totalStockUnits.toFixed(1)}
           </span>
-          <span className="text-[11px] text-slate-400 mt-0.5 block">Litres, kgs & packets</span>
+          <span className="text-[11px] text-slate-400 mt-0.5 block">{t('stock.kpi.unitsHint')}</span>
         </div>
 
         <div
@@ -171,13 +175,13 @@ export const StockScreen: React.FC = () => {
           className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs cursor-pointer hover:border-amber-400 transition-colors"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-500">Low Stock Alert</span>
+            <span className="text-xs text-slate-500">{t('stock.kpi.low')}</span>
             <AlertTriangle className="w-4 h-4 text-amber-500" />
           </div>
           <span className="text-2xl font-bold font-mono-numbers text-amber-600 mt-1 block">
-            {lowStockCount} items
+            {t('stock.kpi.items', { count: lowStockCount })}
           </span>
-          <span className="text-[11px] text-slate-400 mt-0.5 block">At or below reorder level</span>
+          <span className="text-[11px] text-slate-400 mt-0.5 block">{t('stock.kpi.lowHint')}</span>
         </div>
 
         <div
@@ -185,13 +189,13 @@ export const StockScreen: React.FC = () => {
           className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs cursor-pointer hover:border-red-400 transition-colors"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-500">Expiring Soon (FIFO)</span>
+            <span className="text-xs text-slate-500">{t('stock.kpi.expiring')}</span>
             <Clock className="w-4 h-4 text-red-500" />
           </div>
           <span className="text-2xl font-bold font-mono-numbers text-red-600 mt-1 block">
-            {expiringCount} items
+            {t('stock.kpi.items', { count: expiringCount })}
           </span>
-          <span className="text-[11px] text-slate-400 mt-0.5 block">7 days or less remaining</span>
+          <span className="text-[11px] text-slate-400 mt-0.5 block">{t('stock.kpi.expiringHint')}</span>
         </div>
       </div>
 
@@ -205,7 +209,7 @@ export const StockScreen: React.FC = () => {
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Filter by product or SKU..."
+                  placeholder={t('stock.filterPlaceholder')}
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg bg-slate-50"
@@ -217,7 +221,7 @@ export const StockScreen: React.FC = () => {
                 onChange={e => setSelectedCategory(e.target.value)}
                 className="py-1.5 px-3 border border-slate-200 rounded-lg bg-slate-50"
               >
-                <option value="all">All Categories</option>
+                <option value="all">{t('stock.allCategories')}</option>
                 {categories.map(cat => (
                   <option key={cat.id} value={cat.id}>
                     {cat.name}
@@ -234,7 +238,7 @@ export const StockScreen: React.FC = () => {
                   onChange={e => setLowStockOnly(e.target.checked)}
                   className="rounded text-slate-900 focus:ring-0"
                 />
-                <span>Low stock only</span>
+                <span>{t('stock.lowOnly')}</span>
               </label>
             </div>
           </div>
@@ -244,15 +248,15 @@ export const StockScreen: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                  <th className="py-3 px-4 font-semibold">Product Name</th>
-                  <th className="py-3 px-4 font-semibold">SKU</th>
-                  <th className="py-3 px-4 font-semibold">Category</th>
-                  <th className="py-3 px-4 text-right font-semibold">Cost Price</th>
-                  <th className="py-3 px-4 text-right font-semibold">Selling Price</th>
-                  <th className="py-3 px-4 text-right font-semibold">Current Stock</th>
-                  <th className="py-3 px-4 text-right font-semibold">Min Stock</th>
-                  <th className="py-3 px-4 text-right font-semibold">Inventory Valuation</th>
-                  <th className="py-3 px-4 text-center font-semibold">Actions</th>
+                  <th className="py-3 px-4 font-semibold">{t('stock.col.productName')}</th>
+                  <th className="py-3 px-4 font-semibold">{t('stock.col.sku')}</th>
+                  <th className="py-3 px-4 font-semibold">{t('common.category')}</th>
+                  <th className="py-3 px-4 text-right font-semibold">{t('stock.col.costPrice')}</th>
+                  <th className="py-3 px-4 text-right font-semibold">{t('stock.col.sellingPrice')}</th>
+                  <th className="py-3 px-4 text-right font-semibold">{t('stock.col.currentStock')}</th>
+                  <th className="py-3 px-4 text-right font-semibold">{t('stock.col.minStock')}</th>
+                  <th className="py-3 px-4 text-right font-semibold">{t('stock.col.valuation')}</th>
+                  <th className="py-3 px-4 text-center font-semibold">{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -264,10 +268,10 @@ export const StockScreen: React.FC = () => {
                   return (
                     <tr key={product.id} className="hover:bg-slate-50 transition-colors">
                       <td className="py-3 px-4 font-semibold text-slate-900">
-                        {product.name}
+                        {productLabel(product)}
                         {product.track_expiry && (
                           <span className="ml-1.5 text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-normal">
-                            Expiry Tracked
+                            {t('stock.expiryTracked')}
                           </span>
                         )}
                       </td>
@@ -289,11 +293,11 @@ export const StockScreen: React.FC = () => {
                               : 'text-slate-900'
                           }`}
                         >
-                          {product.current_stock} {product.unit}
+                          {product.current_stock} {unitOf(product.unit)}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right font-mono-numbers text-slate-400">
-                        {product.min_stock} {product.unit}
+                        {product.min_stock} {unitOf(product.unit)}
                       </td>
                       <td className="py-3 px-4 text-right font-mono-numbers font-medium text-slate-800">
                         ₹{valuation.toFixed(2)}
@@ -304,7 +308,7 @@ export const StockScreen: React.FC = () => {
                             type="button"
                             onClick={() => setInspectProduct(product)}
                             className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded"
-                            title="View Stock Movement History"
+                            title={t('stock.viewHistory')}
                           >
                             <History className="w-3.5 h-3.5" />
                           </button>
@@ -320,9 +324,9 @@ export const StockScreen: React.FC = () => {
                                 setAdjustError(null);
                               }}
                               className="px-2 py-1 text-[11px] font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded transition-colors"
-                              title="Stock Adjustment (Damage / Expired / Correction)"
+                              title={t('stock.adjustTitle')}
                             >
-                              Adjust
+                              {t('stock.adjust')}
                             </button>
                           )}
                         </div>
@@ -342,10 +346,10 @@ export const StockScreen: React.FC = () => {
           <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl text-xs text-amber-900">
             <h4 className="font-bold flex items-center gap-1.5 text-sm mb-1 text-amber-950">
               <Clock className="w-4 h-4 text-amber-700" />
-              FIFO Expiry Tracking Assumption (V1)
+              {t('stock.fifoTitle')}
             </h4>
             <p>
-              Expiry dates are tracked per purchase invoice line. The remaining physical stock is assumed to come from the newest purchases (FIFO) to generate proactive alerts before products spoil.
+              {t('stock.fifoBody')}
             </p>
           </div>
 
@@ -359,7 +363,7 @@ export const StockScreen: React.FC = () => {
                   : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
               }`}
             >
-              All Alerts ({expiryAlerts.length})
+              {t('stock.filter.all', { count: expiryAlerts.length })}
             </button>
             <button
               onClick={() => setExpiryFilter('expired')}
@@ -369,7 +373,7 @@ export const StockScreen: React.FC = () => {
                   : 'bg-white border border-slate-200 text-red-700 hover:bg-red-50'
               }`}
             >
-              Expired ({expiryAlerts.filter(a => a.status === 'expired').length})
+              {t('stock.filter.expired', { count: expiryAlerts.filter(a => a.status === 'expired').length })}
             </button>
             <button
               onClick={() => setExpiryFilter('today')}
@@ -379,7 +383,7 @@ export const StockScreen: React.FC = () => {
                   : 'bg-white border border-slate-200 text-orange-700 hover:bg-orange-50'
               }`}
             >
-              Expires Today ({expiryAlerts.filter(a => a.status === 'today').length})
+              {t('stock.filter.today', { count: expiryAlerts.filter(a => a.status === 'today').length })}
             </button>
             <button
               onClick={() => setExpiryFilter('3_days')}
@@ -389,7 +393,7 @@ export const StockScreen: React.FC = () => {
                   : 'bg-white border border-slate-200 text-amber-800 hover:bg-amber-50'
               }`}
             >
-              Next 3 Days ({expiryAlerts.filter(a => a.status === '3_days').length})
+              {t('stock.filter.3days', { count: expiryAlerts.filter(a => a.status === '3_days').length })}
             </button>
             <button
               onClick={() => setExpiryFilter('7_days')}
@@ -399,7 +403,7 @@ export const StockScreen: React.FC = () => {
                   : 'bg-white border border-slate-200 text-blue-700 hover:bg-blue-50'
               }`}
             >
-              Within 7 Days ({expiryAlerts.filter(a => a.status === '7_days').length})
+              {t('stock.filter.7days', { count: expiryAlerts.filter(a => a.status === '7_days').length })}
             </button>
           </div>
 
@@ -408,20 +412,20 @@ export const StockScreen: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                  <th className="py-3 px-4 font-semibold">Product</th>
-                  <th className="py-3 px-4 font-semibold">Category</th>
-                  <th className="py-3 px-4 font-semibold">Current Stock on Hand</th>
-                  <th className="py-3 px-4 font-semibold">Expiry Date</th>
-                  <th className="py-3 px-4 font-semibold">Days Remaining</th>
-                  <th className="py-3 px-4 font-semibold">Supplier & Bill No</th>
-                  <th className="py-3 px-4 text-center font-semibold">Action</th>
+                  <th className="py-3 px-4 font-semibold">{t('common.product')}</th>
+                  <th className="py-3 px-4 font-semibold">{t('common.category')}</th>
+                  <th className="py-3 px-4 font-semibold">{t('stock.col.stockOnHand')}</th>
+                  <th className="py-3 px-4 font-semibold">{t('stock.col.expiryDate')}</th>
+                  <th className="py-3 px-4 font-semibold">{t('stock.col.daysRemaining')}</th>
+                  <th className="py-3 px-4 font-semibold">{t('stock.col.supplierBill')}</th>
+                  <th className="py-3 px-4 text-center font-semibold">{t('stock.col.action')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredExpiryAlerts.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="py-8 text-center text-slate-400">
-                      No products matching this expiry alert window.
+                      {t('stock.noExpiry')}
                     </td>
                   </tr>
                 ) : (
@@ -430,11 +434,11 @@ export const StockScreen: React.FC = () => {
                     return (
                       <tr key={idx} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3 px-4 font-semibold text-slate-900">
-                          {alert.product_name}
+                          {nameOf(alert.product_id, alert.product_name)}
                         </td>
                         <td className="py-3 px-4 text-slate-600">{alert.category_name}</td>
                         <td className="py-3 px-4 font-bold font-mono-numbers text-slate-800">
-                          {alert.current_stock} {alert.unit}
+                          {alert.current_stock} {unitOf(alert.unit)}
                         </td>
                         <td className="py-3 px-4 font-mono-numbers text-slate-900 font-semibold">
                           {alert.expiry_date}
@@ -442,19 +446,19 @@ export const StockScreen: React.FC = () => {
                         <td className="py-3 px-4">
                           {alert.status === 'expired' ? (
                             <span className="bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded text-[11px]">
-                              EXPIRED ({Math.abs(alert.days_remaining)} days ago)
+                              {t('stock.expiredAgo', { days: Math.abs(alert.days_remaining) })}
                             </span>
                           ) : alert.status === 'today' ? (
                             <span className="bg-orange-100 text-orange-800 font-bold px-2 py-0.5 rounded text-[11px]">
-                              EXPIRES TODAY!
+                              {t('stock.expiresToday')}
                             </span>
                           ) : alert.status === '3_days' ? (
                             <span className="bg-amber-100 text-amber-900 font-medium px-2 py-0.5 rounded text-[11px]">
-                              {alert.days_remaining} days left
+                              {t('stock.daysLeft', { days: alert.days_remaining })}
                             </span>
                           ) : (
                             <span className="bg-blue-50 text-blue-700 font-medium px-2 py-0.5 rounded text-[11px]">
-                              {alert.days_remaining} days left
+                              {t('stock.daysLeft', { days: alert.days_remaining })}
                             </span>
                           )}
                         </td>
@@ -462,7 +466,7 @@ export const StockScreen: React.FC = () => {
                           {alert.supplier_name || 'Amul Supply'}
                           {alert.purchase_invoice_no && (
                             <span className="block text-[10px] font-mono-numbers text-slate-400">
-                              Bill: {alert.purchase_invoice_no}
+                              {t('stock.bill', { no: alert.purchase_invoice_no })}
                             </span>
                           )}
                         </td>
@@ -474,12 +478,12 @@ export const StockScreen: React.FC = () => {
                                 setAdjustingProduct(prod);
                                 setAdjustType('expired');
                                 setAdjustQty(prod.current_stock);
-                                setAdjustReason('Write off expired stock from FIFO batch');
+                                setAdjustReason(t('stock.writeOffReason'));
                                 setAdjustError(null);
                               }}
                               className="px-2.5 py-1 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded transition-colors"
                             >
-                              Write Off
+                              {t('stock.writeOff')}
                             </button>
                           )}
                         </td>
@@ -498,10 +502,10 @@ export const StockScreen: React.FC = () => {
         <div className="space-y-4">
           <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between text-xs">
             <span className="text-slate-600">
-              Chronological log of every single stock event (Rule 2: stock changes only through movement records).
+              {t('stock.movementsInfo')}
             </span>
             <span className="font-mono-numbers font-semibold text-slate-900">
-              {stockMovements.length} Total Events
+              {t('stock.totalEvents', { count: stockMovements.length })}
             </span>
           </div>
 
@@ -509,12 +513,12 @@ export const StockScreen: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                  <th className="py-3 px-4 font-semibold">Timestamp</th>
-                  <th className="py-3 px-4 font-semibold">Product</th>
-                  <th className="py-3 px-4 font-semibold">Event Type</th>
-                  <th className="py-3 px-4 text-right font-semibold">Quantity</th>
-                  <th className="py-3 px-4 font-semibold">Reason / Reference</th>
-                  <th className="py-3 px-4 font-semibold">User</th>
+                  <th className="py-3 px-4 font-semibold">{t('stock.col.timestamp')}</th>
+                  <th className="py-3 px-4 font-semibold">{t('common.product')}</th>
+                  <th className="py-3 px-4 font-semibold">{t('stock.col.eventType')}</th>
+                  <th className="py-3 px-4 text-right font-semibold">{t('stock.col.quantity')}</th>
+                  <th className="py-3 px-4 font-semibold">{t('stock.col.reasonRef')}</th>
+                  <th className="py-3 px-4 font-semibold">{t('stock.col.user')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono-numbers">
@@ -527,7 +531,7 @@ export const StockScreen: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-3 px-4 font-sans font-semibold text-slate-900">
-                      {m.product_name}
+                      {nameOf(m.product_id, m.product_name)}
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap font-sans">
                       <span
@@ -543,7 +547,7 @@ export const StockScreen: React.FC = () => {
                             : 'bg-slate-100 text-slate-700'
                         }`}
                       >
-                        {m.type.replace('_', ' ')}
+                        {tx(`movement.${m.type}`, m.type.replace('_', ' '))}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right font-bold whitespace-nowrap">
@@ -552,7 +556,7 @@ export const StockScreen: React.FC = () => {
                       </span>
                     </td>
                     <td className="py-3 px-4 font-sans text-slate-600">
-                      {m.reason || (m.ref_id ? `Ref: ${m.ref_id}` : '—')}
+                      {m.reason || (m.ref_id ? t('stock.ref', { id: m.ref_id }) : '—')}
                     </td>
                     <td className="py-3 px-4 font-sans text-slate-500">{m.created_by}</td>
                   </tr>
@@ -569,9 +573,13 @@ export const StockScreen: React.FC = () => {
           <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-5 space-y-4 max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between border-b pb-3">
               <div>
-                <h3 className="font-bold text-slate-900 text-base">{inspectProduct.name}</h3>
+                <h3 className="font-bold text-slate-900 text-base">{productLabel(inspectProduct)}</h3>
                 <p className="text-xs text-slate-500 font-mono-numbers">
-                  SKU: {inspectProduct.sku} · Current Stock: {inspectProduct.current_stock} {inspectProduct.unit}
+                  {t('stock.inspectMeta', {
+                    sku: inspectProduct.sku,
+                    qty: inspectProduct.current_stock,
+                    unit: unitOf(inspectProduct.unit),
+                  })}
                 </p>
               </div>
               <button
@@ -586,10 +594,10 @@ export const StockScreen: React.FC = () => {
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500">
-                    <th className="p-2">Date</th>
-                    <th className="p-2">Type</th>
-                    <th className="p-2 text-right">Quantity</th>
-                    <th className="p-2">Reason</th>
+                    <th className="p-2">{t('common.date')}</th>
+                    <th className="p-2">{t('stock.col.type')}</th>
+                    <th className="p-2 text-right">{t('stock.col.quantity')}</th>
+                    <th className="p-2">{t('stock.col.reason')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-mono-numbers">
@@ -600,7 +608,7 @@ export const StockScreen: React.FC = () => {
                         <td className="p-2 text-slate-500">
                           {new Date(m.created_at).toLocaleDateString()}
                         </td>
-                        <td className="p-2 font-sans capitalize">{m.type.replace('_', ' ')}</td>
+                        <td className="p-2 font-sans capitalize">{tx(`movement.${m.type}`, m.type.replace('_', ' '))}</td>
                         <td
                           className={`p-2 text-right font-bold ${
                             m.qty > 0 ? 'text-emerald-600' : 'text-slate-800'
@@ -621,7 +629,7 @@ export const StockScreen: React.FC = () => {
                 onClick={() => setInspectProduct(null)}
                 className="px-4 py-1.5 text-xs font-semibold bg-slate-900 text-white rounded-lg"
               >
-                Close
+                {t('common.close')}
               </button>
             </div>
           </div>
@@ -634,10 +642,10 @@ export const StockScreen: React.FC = () => {
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 space-y-4">
             <div>
               <h3 className="font-bold text-slate-900 text-sm">
-                Adjust Stock: {adjustingProduct.name}
+                {t('stock.adjustHeading', { name: productLabel(adjustingProduct) })}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Current Stock on Record: <strong>{adjustingProduct.current_stock} {adjustingProduct.unit}</strong>
+                {t('stock.onRecord')} <strong>{adjustingProduct.current_stock} {unitOf(adjustingProduct.unit)}</strong>
               </p>
             </div>
 
@@ -649,7 +657,7 @@ export const StockScreen: React.FC = () => {
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-600 font-semibold mb-1">Adjustment Reason Type *</label>
+                <label className="block text-slate-600 font-semibold mb-1">{t('stock.reasonType')}</label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
@@ -660,7 +668,7 @@ export const StockScreen: React.FC = () => {
                         : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    Damage / Spoilage
+                    {t('stock.type.damage')}
                   </button>
                   <button
                     type="button"
@@ -671,7 +679,7 @@ export const StockScreen: React.FC = () => {
                         : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    Expired Write-off
+                    {t('stock.type.expired')}
                   </button>
                   <button
                     type="button"
@@ -682,7 +690,7 @@ export const StockScreen: React.FC = () => {
                         : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    Count Correction
+                    {t('stock.type.adjustment')}
                   </button>
                 </div>
               </div>
@@ -690,15 +698,15 @@ export const StockScreen: React.FC = () => {
               <div>
                 <label className="block text-slate-600 font-semibold mb-1">
                   {adjustType === 'damage' || adjustType === 'expired'
-                    ? `Deduct Quantity (${adjustingProduct.unit}) *`
-                    : `Net Change Quantity (+/- ${adjustingProduct.unit}) *`}
+                    ? t('stock.deductQty', { unit: unitOf(adjustingProduct.unit) })
+                    : t('stock.netQty', { unit: unitOf(adjustingProduct.unit) })}
                 </label>
                 <input
                   type="number"
                   step={qtyStep(adjustingProduct.unit)}
                   required
                   inputMode={isLooseUnit(adjustingProduct.unit) ? 'decimal' : 'numeric'}
-                  placeholder="e.g. 2 or -2"
+                  placeholder={t('stock.qtyPlaceholder')}
                   value={adjustQty || ''}
                   onChange={e => setAdjustQty(parseQty(e.target.value, adjustingProduct.unit))}
                   className="w-full p-2 border border-slate-200 rounded-lg font-mono-numbers font-semibold"
@@ -707,12 +715,12 @@ export const StockScreen: React.FC = () => {
 
               <div>
                 <label className="block text-slate-600 font-semibold mb-1">
-                  Mandatory Audit Reason *
+                  {t('stock.auditReason')}
                 </label>
                 <textarea
                   rows={2}
                   required
-                  placeholder="e.g. Leaked pouch found in morning delivery / Physical count matched 42..."
+                  placeholder={t('stock.reasonPlaceholder')}
                   value={adjustReason}
                   onChange={e => setAdjustReason(e.target.value)}
                   className="w-full p-2 border border-slate-200 rounded-lg text-xs"
@@ -726,7 +734,7 @@ export const StockScreen: React.FC = () => {
                 onClick={() => setAdjustingProduct(null)}
                 className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -734,7 +742,7 @@ export const StockScreen: React.FC = () => {
                 onClick={handleConfirmAdjust}
                 className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
               >
-                Record Adjustment & Audit
+                {t('stock.recordAdjustment')}
               </button>
             </div>
           </div>

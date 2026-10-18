@@ -11,6 +11,7 @@ import {
   Database,
   ShieldAlert,
 } from 'lucide-react';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 export const SettingsScreen: React.FC = () => {
   const {
@@ -23,6 +24,7 @@ export const SettingsScreen: React.FC = () => {
     products,
     historyDays,
   } = useDairy();
+  const { t } = useLanguage();
 
   const [shopName, setShopName] = useState(settings.shop_name);
   const [address, setAddress] = useState(settings.address);
@@ -53,7 +55,7 @@ export const SettingsScreen: React.FC = () => {
       allow_negative_stock: allowNegativeStock,
     });
     if (!res.success) {
-      alert(res.error || 'Failed to save settings');
+      alert(res.error || t('settings.saveFailed'));
       return;
     }
     setSavedSuccess(true);
@@ -80,21 +82,21 @@ export const SettingsScreen: React.FC = () => {
     const reader = new FileReader();
     reader.onload = async event => {
       const text = event.target?.result as string;
-      setBackupRestoreMsg({ success: true, msg: 'Restoring backup to Firebase…' });
+      setBackupRestoreMsg({ success: true, msg: t('settings.backup.restoring') });
       const res = await importDatabaseJSON(text);
       if (res.success) {
-        setBackupRestoreMsg({ success: true, msg: 'Backup restored to Firebase. All devices update automatically.' });
+        setBackupRestoreMsg({ success: true, msg: t('settings.backup.restored') });
       } else {
-        setBackupRestoreMsg({ success: false, msg: res.error || 'Failed to restore JSON backup.' });
+        setBackupRestoreMsg({ success: false, msg: res.error || t('settings.backup.restoreFailed') });
       }
     };
     reader.readAsText(file);
   };
 
   const handleLoadDemoData = async () => {
-    if (confirm('Load sample dairy products, customers and bills into this shop? Use this only on a test Firebase project.')) {
+    if (confirm(t('settings.demo.confirm'))) {
       const res = await loadDemoData();
-      setBackupRestoreMsg({ success: res.success, msg: res.success ? 'Demo data loaded.' : res.error || 'Failed to load demo data.' });
+      setBackupRestoreMsg({ success: res.success, msg: res.success ? t('settings.demo.loaded') : res.error || t('settings.demo.failed') });
     }
   };
 
@@ -103,30 +105,30 @@ export const SettingsScreen: React.FC = () => {
       {/* Header */}
       <div>
         <h2 className="text-xl font-bold tracking-tight text-slate-900">
-          Shop Settings & System Backup
+          {t('settings.title')}
         </h2>
         <p className="text-xs text-slate-500 mt-1">
-          Configure parlour receipts, UPI payment IDs, cashier discount caps, and automated off-server backups
+          {t('settings.subtitle')}
         </p>
       </div>
 
       {savedSuccess && (
         <div className="p-3 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>Shop settings updated successfully!</span>
+          <span>{t('settings.saved')}</span>
         </div>
       )}
 
       {/* Settings Form */}
       <form onSubmit={handleSave} className="bg-white rounded-xl border border-slate-200 p-6 shadow-2xs space-y-5">
         <div className="border-b border-slate-200 pb-3">
-          <h3 className="text-sm font-bold text-slate-900">Shop Identity & Receipt Printing</h3>
-          <p className="text-xs text-slate-500">Appears at top and footer of thermal and A4 bills</p>
+          <h3 className="text-sm font-bold text-slate-900">{t('settings.identity.title')}</h3>
+          <p className="text-xs text-slate-500">{t('settings.identity.subtitle')}</p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">Shop Name *</label>
+            <label className="block text-slate-700 font-semibold mb-1">{t('settings.shopName')}</label>
             <input
               type="text"
               required
@@ -137,7 +139,7 @@ export const SettingsScreen: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">Contact Phone *</label>
+            <label className="block text-slate-700 font-semibold mb-1">{t('settings.phone')}</label>
             <input
               type="text"
               required
@@ -148,7 +150,7 @@ export const SettingsScreen: React.FC = () => {
           </div>
 
           <div className="sm:col-span-2">
-            <label className="block text-slate-700 font-semibold mb-1">Shop Address / Landmark *</label>
+            <label className="block text-slate-700 font-semibold mb-1">{t('settings.address')}</label>
             <input
               type="text"
               required
@@ -159,22 +161,22 @@ export const SettingsScreen: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">Shop UPI VPA Address *</label>
+            <label className="block text-slate-700 font-semibold mb-1">{t('settings.upi')}</label>
             <input
               type="text"
               required
-              placeholder="e.g. gokuldairy@okaxis"
+              placeholder={t('settings.upiPlaceholder')}
               value={upiId}
               onChange={e => setUpiId(e.target.value)}
               className="w-full p-2 border border-slate-200 rounded-lg font-mono-numbers"
             />
             <span className="text-[10px] text-slate-400 mt-0.5 block">
-              Used to generate dynamic QR codes on customer receipts
+              {t('settings.upiHint')}
             </span>
           </div>
 
           <div>
-            <label className="block text-slate-700 font-semibold mb-1">Invoice Prefix *</label>
+            <label className="block text-slate-700 font-semibold mb-1">{t('settings.invoicePrefix')}</label>
             <input
               type="text"
               required
@@ -184,12 +186,12 @@ export const SettingsScreen: React.FC = () => {
               className="w-full p-2 border border-slate-200 rounded-lg font-mono-numbers uppercase font-bold"
             />
             <span className="text-[10px] text-slate-400 mt-0.5 block">
-              Result: {invoicePrefix}-2026-000104
+              {t('settings.invoicePrefixResult', { example: `${invoicePrefix}-2026-000104` })}
             </span>
           </div>
 
           <div className="sm:col-span-2">
-            <label className="block text-slate-700 font-semibold mb-1">Receipt Footer Message</label>
+            <label className="block text-slate-700 font-semibold mb-1">{t('settings.receiptFooter')}</label>
             <input
               type="text"
               value={receiptFooter}
@@ -202,13 +204,13 @@ export const SettingsScreen: React.FC = () => {
         {/* Operational Business Rules */}
         <div className="border-t border-slate-200 pt-5 space-y-4 text-xs">
           <div className="border-b border-slate-100 pb-2">
-            <h3 className="text-sm font-bold text-slate-900">Operational Controls & Permissions</h3>
+            <h3 className="text-sm font-bold text-slate-900">{t('settings.controls.title')}</h3>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-slate-700 font-semibold mb-1">
-                Cashier Max Allowed Discount (%) *
+                {t('settings.maxDiscount')}
               </label>
               <input
                 type="number"
@@ -219,12 +221,12 @@ export const SettingsScreen: React.FC = () => {
                 className="w-full p-2 border border-slate-200 rounded-lg font-mono-numbers"
               />
               <span className="text-[10px] text-slate-400 mt-0.5 block">
-                Discounts exceeding this percentage require Owner authorization
+                {t('settings.maxDiscountHint')}
               </span>
             </div>
 
             <div>
-              <label className="block text-slate-700 font-semibold mb-1">GST Billing Mode</label>
+              <label className="block text-slate-700 font-semibold mb-1">{t('settings.gstMode')}</label>
               <div className="flex items-center gap-3 mt-2">
                 <label className="flex items-center gap-1.5 cursor-pointer">
                   <input
@@ -233,7 +235,7 @@ export const SettingsScreen: React.FC = () => {
                     onChange={e => setGstEnabled(e.target.checked)}
                     className="rounded text-slate-900"
                   />
-                  <span>Enable GST on bills</span>
+                  <span>{t('settings.gstEnable')}</span>
                 </label>
                 {gstEnabled && (
                   <div className="flex items-center gap-1">
@@ -257,10 +259,10 @@ export const SettingsScreen: React.FC = () => {
                   onChange={e => setAllowNegativeStock(e.target.checked)}
                   className="rounded text-slate-900"
                 />
-                <span>Allow negative stock sales (Rule 4: disabled by default)</span>
+                <span>{t('settings.negativeStock')}</span>
               </label>
               <span className="text-[10px] text-slate-500 block pl-5 mt-0.5">
-                When unchecked, bills are strictly rejected if inventory on hand is insufficient.
+                {t('settings.negativeStockHint')}
               </span>
             </div>
           </div>
@@ -272,7 +274,7 @@ export const SettingsScreen: React.FC = () => {
             className="flex items-center gap-1.5 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-sm transition-all"
           >
             <Save className="w-4 h-4" />
-            <span>Save Configuration</span>
+            <span>{t('settings.saveConfig')}</span>
           </button>
         </div>
       </form>
@@ -283,10 +285,10 @@ export const SettingsScreen: React.FC = () => {
           <div>
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Database className="w-4 h-4 text-slate-700" />
-              <span>Full Database Backup & Disaster Recovery (Week 5 Plan)</span>
+              <span>{t('settings.backup.title')}</span>
             </h3>
             <p className="text-xs text-slate-500">
-              Download complete database snapshots (all 15 tables) and test restore procedures
+              {t('settings.backup.subtitle')}
             </p>
           </div>
         </div>
@@ -312,9 +314,9 @@ export const SettingsScreen: React.FC = () => {
           {/* Export JSON */}
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 flex flex-col justify-between">
             <div>
-              <h5 className="font-bold text-slate-900">1. Download Backup (JSON)</h5>
+              <h5 className="font-bold text-slate-900">{t('settings.backup.downloadTitle')}</h5>
               <p className="text-slate-500 text-[11px] mt-1">
-                Creates an offline copy of products, customer ledgers, purchases and expenses, plus the last {historyDays} days of bills, stock movements and audit logs.
+                {t('settings.backup.downloadDesc', { days: historyDays })}
               </p>
             </div>
             <button
@@ -323,21 +325,21 @@ export const SettingsScreen: React.FC = () => {
               className="w-full py-2 px-3 bg-white border border-slate-300 hover:bg-slate-100 font-semibold text-slate-800 rounded-lg flex items-center justify-center gap-1.5 transition-colors"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Export Full Database</span>
+              <span>{t('settings.backup.export')}</span>
             </button>
           </div>
 
           {/* Restore JSON */}
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 flex flex-col justify-between">
             <div>
-              <h5 className="font-bold text-slate-900">2. Restore Database</h5>
+              <h5 className="font-bold text-slate-900">{t('settings.backup.restoreTitle')}</h5>
               <p className="text-slate-500 text-[11px] mt-1">
-                Test disaster restore into a fresh Firebase project. Writes the backup's records to Firestore (staff logins must be re-added).
+                {t('settings.backup.restoreDesc')}
               </p>
             </div>
             <label className="w-full py-2 px-3 bg-white border border-slate-300 hover:bg-slate-100 font-semibold text-slate-800 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
               <Upload className="w-3.5 h-3.5" />
-              <span>Upload Backup JSON</span>
+              <span>{t('settings.backup.upload')}</span>
               <input type="file" accept=".json" onChange={handleRestoreFile} className="hidden" />
             </label>
           </div>
@@ -345,9 +347,9 @@ export const SettingsScreen: React.FC = () => {
           {/* Load Demo Data (empty shop only) */}
           <div className="p-4 bg-red-50/50 border border-red-200 rounded-xl space-y-2 flex flex-col justify-between">
             <div>
-              <h5 className="font-bold text-red-900">3. Load Demo Data</h5>
+              <h5 className="font-bold text-red-900">{t('settings.demo.title')}</h5>
               <p className="text-red-700 text-[11px] mt-1">
-                Fills an empty shop with sample dairy stock, customers and bills for testing. Only available before any product exists.
+                {t('settings.demo.desc')}
               </p>
             </div>
             <button
@@ -357,7 +359,7 @@ export const SettingsScreen: React.FC = () => {
               className="w-full py-2 px-3 bg-white border border-red-300 text-red-700 hover:bg-red-50 font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>{products.length > 0 ? 'Shop already has data' : 'Load Demo Data'}</span>
+              <span>{products.length > 0 ? t('settings.demo.hasData') : t('settings.demo.button')}</span>
             </button>
           </div>
         </div>

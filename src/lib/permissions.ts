@@ -1,4 +1,5 @@
 import { CashierPermission, User } from '../types';
+import { translate, translateDynamic } from '../i18n';
 
 // Sensitive permissions a cashier only gets when the owner ticks them (firestore.rules uses the same list)
 export const DEFAULT_OFF: CashierPermission[] = ['view_profit'];
@@ -22,5 +23,5 @@ export const PERMISSION_LABELS: { key: CashierPermission; label: string; hint: s
 
 export const permissionDenied = (permission: CashierPermission) => {
   const label = PERMISSION_LABELS.find(p => p.key === permission)?.label ?? permission;
-  return `Permission denied: "${label}" is turned off for your account. Ask the Owner.`;
+  return translate('perm.denied', { label: translateDynamic(`perm.${permission}`, label) });
 };
