@@ -10,6 +10,8 @@ import {
 } from '../../lib/profit';
 import type { ChartPoint } from './ProfitChart';
 import { TrendingUp, ChevronLeft, ChevronRight, RefreshCw, AlertTriangle, Info } from 'lucide-react';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { useProductName } from '../../i18n/useProductName';
 
 // Recharts is only downloaded when this screen opens
 const ProfitChart = lazy(() => import('./ProfitChart'));
@@ -24,6 +26,8 @@ const change = (curr: number, prev: number) => (prev === 0 ? null : ((curr - pre
 
 export const ProfitScreen: React.FC = () => {
   const { currentBusinessDate, currentUser, expenses, products, categories, fetchDailyProfit, rebuildDailyProfit } = useDairy();
+  const { t, tx } = useLanguage();
+  const { nameOf } = useProductName();
 
   const [period, setPeriod] = useState<ProfitPeriod>('day');
   const [anchor, setAnchor] = useState(currentBusinessDate);
@@ -51,7 +55,7 @@ export const ProfitScreen: React.FC = () => {
       .then(rows => !cancelled && setDays(rows))
       .catch(err => {
         console.error(err);
-        if (!cancelled) setError('Could not load profit data. Check your connection and try again.');
+        if (!cancelled) setError(t('profit.loadFailed'));
       })
       .finally(() => !cancelled && setLoading(false));
     return () => {
@@ -89,7 +93,8 @@ export const ProfitScreen: React.FC = () => {
       });
     }
     if (period === 'year') {
-      return MONTHS.map((label, i) => {
+      return MONTHS.map((m, i) => {
+        const label = tx(`profit.month.${i}`, m);
         const prefix = `${from.slice(0, 4)}-${String(i + 1).padStart(2, '0')}`;
         const month = sumDays(days.filter(d => d.date.startsWith(prefix)), prefix);
         const g = r2(month.revenue - month.cost);
@@ -99,12 +104,12 @@ export const ProfitScreen: React.FC = () => {
     const byCat = new Map<string, number>();
     Object.entries(current.products).forEach(([pid, p]) => {
       const catId = products.find(x => x.id === pid)?.category_id;
-      const name = categories.find(c => c.id === catId)?.name || 'Other';
+      const name = categories.find(c => c.id === catId)?.name || t('profit.otherCategory');
       byCat.set(name, r2((byCat.get(name) || 0) + p.revenue - p.cost));
     });
     return Array.from(byCat, ([label, g]) => ({ label, gross: g })).sort((a, b) => b.gross - a.gross);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days, period, from, to, current, expenses, products, categories]);
+  }, [days, period, from, to, current, expenses, products, categories, t, tx]);
 
   const productRows = useMemo(
     () =>
@@ -129,15 +134,16 @@ export const ProfitScreen: React.FC = () => {
     const res = await rebuildDailyProfit(rebuildFrom, rebuildTo);
     setRebuilding(false);
     if (!res.success) {
-      setRebuildMsg(res.error || 'Rebuild failed');
+      setRebuildMsg(res.error || t('profit.rebuildFailed'));
       return;
     }
-    setRebuildMsg(`Rebuilt ${res.days} day(s) from ${res.bills} bill(s).`);
+    setRebuildMsg(t('profit.rebuilt', { days: res.days ?? 0, bills: res.bills ?? 0 }));
     setReloadKey(k => k + 1);
   };
 
   const card = (title: string, value: number, prev: number, opts: { hint?: string; tone?: 'profit' | 'cost' } = {}) => {
     const pct = change(value, prev);
+    const periodWord = tx(`profit.periodWord.${period}`, period);
     // For costs and expenses, going down is the good direction
     const good = pct === null ? null : opts.tone === 'cost' ? pct <= 0 : pct >= 0;
     return (
@@ -152,10 +158,10 @@ export const ProfitScreen: React.FC = () => {
         </span>
         <span className="text-[11px] mt-0.5 block text-slate-500">
           {pct === null ? (
-            'No data for previous period'
+            t('profit.noPrevData')
           ) : (
             <span className={good ? 'text-emerald-700' : 'text-red-600'}>
-              {pct >= 0 ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}% vs previous {period}
+              {pct >= 0 ? '▲' : '▼'} {t('profit.vsPrevious', { pct: Math.abs(pct).toFixed(1), period: periodWord })}
             </span>
           )}
           {opts.hint && <span className="block text-slate-400">{opts.hint}</span>}
@@ -173,9 +179,9 @@ export const ProfitScreen: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-emerald-600" />
-            <span>Profit</span>
+            <span>{t('profit.title')}</span>
           </h2>
-          <p className="text-xs text-slate-500 mt-1">Sales are counted before GST and after discounts</p>
+          <p className="text-xs text-slate-500 mt-1">{t('profit.subtitle')}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -189,7 +195,7 @@ export const ProfitScreen: React.FC = () => {
                   period === p ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                {p}
+                {tx(`profit.period.${p}`, p)}
               </button>
             ))}
           </div>
@@ -199,7 +205,7 @@ export const ProfitScreen: React.FC = () => {
               type="button"
               onClick={() => setAnchor(a => shiftPeriod(period, a, -1))}
               className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-l-lg"
-              title={`Previous ${period}`}
+              title={t('profit.prevPeriod', { period: tx(`profit.periodWord.${period}`, period) })}
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -236,7 +242,7 @@ export const ProfitScreen: React.FC = () => {
               type="button"
               onClick={() => setAnchor(a => shiftPeriod(period, a, 1))}
               className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-r-lg"
-              title={`Next ${period}`}
+              title={t('profit.nextPeriod', { period: tx(`profit.periodWord.${period}`, period) })}
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -247,7 +253,7 @@ export const ProfitScreen: React.FC = () => {
             onClick={() => setAnchor(currentBusinessDate)}
             className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-semibold text-slate-700 hover:bg-slate-50"
           >
-            Today
+            {t('profit.today')}
           </button>
 
           {currentUser.role === 'owner' && (
@@ -255,10 +261,10 @@ export const ProfitScreen: React.FC = () => {
               type="button"
               onClick={openRebuild}
               className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-1"
-              title="Recalculate profit from the bills"
+              title={t('profit.rebuildTitle')}
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Rebuild</span>
+              <span>{t('profit.rebuild')}</span>
             </button>
           )}
         </div>
@@ -269,12 +275,11 @@ export const ProfitScreen: React.FC = () => {
       {showRebuild && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs space-y-2">
           <p className="text-amber-900">
-            Recalculates profit from the bills for this date range. Use it once after an update to include older bills, or if
-            numbers ever look wrong.
+            {t('profit.rebuildHelp')}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <input type="date" value={rebuildFrom} onChange={e => setRebuildFrom(e.target.value)} className="px-2 py-1 border border-amber-300 rounded bg-white" />
-            <span>to</span>
+            <span>{t('profit.to')}</span>
             <input type="date" value={rebuildTo} onChange={e => setRebuildTo(e.target.value)} className="px-2 py-1 border border-amber-300 rounded bg-white" />
             <button
               type="button"
@@ -282,10 +287,10 @@ export const ProfitScreen: React.FC = () => {
               onClick={handleRebuild}
               className="px-3 py-1.5 bg-slate-900 text-white font-semibold rounded-lg disabled:opacity-60"
             >
-              {rebuilding ? 'Rebuilding…' : 'Rebuild now'}
+              {rebuilding ? t('profit.rebuilding') : t('profit.rebuildNow')}
             </button>
             <button type="button" onClick={() => setShowRebuild(false)} className="px-2 py-1.5 text-slate-600 hover:text-slate-900">
-              Close
+              {t('common.close')}
             </button>
           </div>
           {rebuildMsg && <p className="font-semibold text-slate-800">{rebuildMsg}</p>}
@@ -298,36 +303,35 @@ export const ProfitScreen: React.FC = () => {
         <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-2 flex items-start gap-1.5">
           <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           <span>
-            {current.estimated_cost_bills} bill(s) were made before cost was recorded on bills, so their cost uses today's
-            purchase price. These numbers are estimated.
+            {t('profit.estimated', { count: current.estimated_cost_bills })}
           </span>
         </p>
       )}
 
       {/* Summary cards */}
       <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 ${loading ? 'opacity-50' : ''}`}>
-        {card('Sales (before GST)', current.revenue, previous.revenue, { hint: `${current.bills} bill(s)` })}
-        {card('Cost of goods', current.cost, previous.cost, { tone: 'cost' })}
-        {card('Gross profit', gross, prevGross, { tone: 'profit', hint: `Margin ${margin.toFixed(1)}%` })}
-        {card('Expenses', exp, prevExp, { tone: 'cost' })}
-        {card('Net profit', net, prevNet, { tone: 'profit', hint: 'Gross profit − expenses' })}
+        {card(t('profit.card.sales'), current.revenue, previous.revenue, { hint: t('profit.billsCount', { count: current.bills }) })}
+        {card(t('profit.card.cost'), current.cost, previous.cost, { tone: 'cost' })}
+        {card(t('profit.card.gross'), gross, prevGross, { tone: 'profit', hint: t('profit.marginHint', { pct: margin.toFixed(1) }) })}
+        {card(t('profit.card.expenses'), exp, prevExp, { tone: 'cost' })}
+        {card(t('profit.card.net'), net, prevNet, { tone: 'profit', hint: t('profit.netHint') })}
       </div>
 
       {isEmpty ? (
         <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-slate-500 text-sm">
-          No bills or expenses for {periodLabel(period, anchor)}.
+          {t('profit.empty', { period: periodLabel(period, anchor) })}
         </div>
       ) : (
         <>
           {/* Chart */}
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
             <h3 className="font-bold text-sm text-slate-900 mb-3">
-              {period === 'day' ? 'Gross profit by category' : period === 'month' ? 'Profit by day' : 'Profit by month'}
+              {period === 'day' ? t('profit.chart.byCategory') : period === 'month' ? t('profit.chart.byDay') : t('profit.chart.byMonth')}
             </h3>
             {chartData.length === 0 ? (
-              <p className="text-xs text-slate-500">No sales to chart.</p>
+              <p className="text-xs text-slate-500">{t('profit.chart.empty')}</p>
             ) : (
-              <Suspense fallback={<div className="h-72 flex items-center justify-center text-xs text-slate-400">Loading chart…</div>}>
+              <Suspense fallback={<div className="h-72 flex items-center justify-center text-xs text-slate-400">{t('profit.chart.loading')}</div>}>
                 <ProfitChart data={chartData} showNet={period !== 'day'} />
               </Suspense>
             )}
@@ -336,22 +340,22 @@ export const ProfitScreen: React.FC = () => {
           {/* Product tables */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
-              <h3 className="font-bold text-sm text-slate-900 p-4 border-b border-slate-200">Top products by profit</h3>
+              <h3 className="font-bold text-sm text-slate-900 p-4 border-b border-slate-200">{t('profit.topProducts')}</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                      <th className="py-2 px-3 font-semibold">Product</th>
-                      <th className="py-2 px-3 font-semibold text-right">Qty</th>
-                      <th className="py-2 px-3 font-semibold text-right">Sales</th>
-                      <th className="py-2 px-3 font-semibold text-right">Profit</th>
-                      <th className="py-2 px-3 font-semibold text-right">Margin</th>
+                      <th className="py-2 px-3 font-semibold">{t('common.product')}</th>
+                      <th className="py-2 px-3 font-semibold text-right">{t('common.qty')}</th>
+                      <th className="py-2 px-3 font-semibold text-right">{t('profit.col.sales')}</th>
+                      <th className="py-2 px-3 font-semibold text-right">{t('profit.col.profit')}</th>
+                      <th className="py-2 px-3 font-semibold text-right">{t('profit.col.margin')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono-numbers">
                     {topProducts.map(p => (
                       <tr key={p.pid}>
-                        <td className="py-2 px-3 font-sans text-slate-800">{p.name}</td>
+                        <td className="py-2 px-3 font-sans text-slate-800">{nameOf(p.pid, p.name)}</td>
                         <td className="py-2 px-3 text-right">{p.qty}</td>
                         <td className="py-2 px-3 text-right">{inr(p.revenue)}</td>
                         <td className={`py-2 px-3 text-right font-semibold ${p.profit < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
@@ -363,7 +367,7 @@ export const ProfitScreen: React.FC = () => {
                     {topProducts.length === 0 && (
                       <tr>
                         <td colSpan={5} className="py-3 px-3 font-sans text-slate-500">
-                          No products sold.
+                          {t('profit.noProducts')}
                         </td>
                       </tr>
                     )}
@@ -375,26 +379,26 @@ export const ProfitScreen: React.FC = () => {
             <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
               <h3 className="font-bold text-sm text-slate-900 p-4 border-b border-slate-200 flex items-center gap-1.5">
                 <AlertTriangle className="w-4 h-4 text-red-500" />
-                <span>Sold below cost</span>
+                <span>{t('profit.belowCost')}</span>
               </h3>
               {belowCost.length === 0 ? (
-                <p className="p-4 text-xs text-emerald-700">Nothing was sold below cost in this period.</p>
+                <p className="p-4 text-xs text-emerald-700">{t('profit.noneBelowCost')}</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                        <th className="py-2 px-3 font-semibold">Product</th>
-                        <th className="py-2 px-3 font-semibold text-right">Qty</th>
-                        <th className="py-2 px-3 font-semibold text-right">Sales</th>
-                        <th className="py-2 px-3 font-semibold text-right">Cost</th>
-                        <th className="py-2 px-3 font-semibold text-right">Loss</th>
+                        <th className="py-2 px-3 font-semibold">{t('common.product')}</th>
+                        <th className="py-2 px-3 font-semibold text-right">{t('common.qty')}</th>
+                        <th className="py-2 px-3 font-semibold text-right">{t('profit.col.sales')}</th>
+                        <th className="py-2 px-3 font-semibold text-right">{t('profit.col.cost')}</th>
+                        <th className="py-2 px-3 font-semibold text-right">{t('profit.col.loss')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-mono-numbers">
                       {belowCost.map(p => (
                         <tr key={p.pid} className="bg-red-50/40">
-                          <td className="py-2 px-3 font-sans text-slate-800">{p.name}</td>
+                          <td className="py-2 px-3 font-sans text-slate-800">{nameOf(p.pid, p.name)}</td>
                           <td className="py-2 px-3 text-right">{p.qty}</td>
                           <td className="py-2 px-3 text-right">{inr(p.revenue)}</td>
                           <td className="py-2 px-3 text-right">{inr(p.cost)}</td>

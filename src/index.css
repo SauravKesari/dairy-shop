@@ -14,6 +14,12 @@
   }
 }
 
+/* Hindi mode: Devanagari needs its own font, otherwise each device falls back to a different system font */
+html:lang(hi) body,
+html:lang(hi) .font-sans {
+  font-family: 'Noto Sans Devanagari', 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
 /* Print CSS for Thermal 58mm/80mm and A4 receipts */
 @media print {
   /* Remove the app behind the receipt from the layout (not just hide it), so it can't add extra pages */

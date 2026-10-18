@@ -15,6 +15,7 @@ import {
   connectFirestoreEmulator,
   Firestore,
 } from 'firebase/firestore';
+import { translate } from '../i18n';
 
 const env = import.meta.env;
 
@@ -85,14 +86,14 @@ export const createAuthUser = async (mobile: string, pin: string): Promise<strin
 // Maps Firebase error codes to messages a shop counter user can act on
 export const friendlyFirebaseError = (err: any): string => {
   const code: string = err?.code || '';
-  if (code === 'permission-denied') return 'Permission denied: your role is not allowed to do this, or the day is closed.';
-  if (code === 'unavailable') return 'No internet connection. Please retry, or use the paper bill book and enter it later.';
+  if (code === 'permission-denied') return translate('err.permissionDenied');
+  if (code === 'unavailable') return translate('err.offline');
   if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found')
-    return 'Wrong mobile number or PIN.';
-  if (code === 'auth/too-many-requests') return 'Too many attempts. Please wait a few minutes and try again.';
-  if (code === 'auth/email-already-in-use') return 'A login already exists for this mobile number.';
-  if (code === 'auth/weak-password') return `PIN must be at least ${MIN_PIN_LENGTH} digits.`;
-  if (code === 'auth/requires-recent-login') return 'Please sign out and sign in again, then retry.';
-  if (code === 'auth/network-request-failed') return 'No internet connection.';
-  return err?.message || 'Something went wrong.';
+    return translate('err.wrongPin');
+  if (code === 'auth/too-many-requests') return translate('err.tooManyAttempts');
+  if (code === 'auth/email-already-in-use') return translate('err.loginExists');
+  if (code === 'auth/weak-password') return translate('err.weakPin', { min: MIN_PIN_LENGTH });
+  if (code === 'auth/requires-recent-login') return translate('err.reLogin');
+  if (code === 'auth/network-request-failed') return translate('err.noInternet');
+  return err?.message || translate('err.generic');
 };

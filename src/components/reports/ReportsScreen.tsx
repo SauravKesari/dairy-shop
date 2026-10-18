@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useDairy } from '../../context/DairyContext';
 import { FileSpreadsheet, FileText, Download, Calendar, DollarSign, Package, TrendingUp, Users } from 'lucide-react';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { useProductName } from '../../i18n/useProductName';
 
 type ReportType =
   | 'daily_summary'
@@ -22,6 +24,8 @@ export const ReportsScreen: React.FC = () => {
     currentBusinessDate,
     settings,
   } = useDairy();
+  const { t, tx } = useLanguage();
+  const { productLabel, nameOf, unitOf } = useProductName();
 
   const [activeReport, setActiveReport] = useState<ReportType>('daily_summary');
 
@@ -72,7 +76,7 @@ export const ReportsScreen: React.FC = () => {
   const getProductSalesData = () => {
     const map = new Map<
       string,
-      { product_name: string; unit: string; qty_sold: number; revenue: number; category: string }
+      { product_id: string; product_name: string; unit: string; qty_sold: number; revenue: number; category: string }
     >();
 
     sales
@@ -82,6 +86,7 @@ export const ReportsScreen: React.FC = () => {
           const prod = products.find(p => p.id === item.product_id);
           const cat = categories.find(c => c.id === prod?.category_id);
           const existing = map.get(item.product_id) || {
+            product_id: item.product_id,
             product_name: item.product_name,
             unit: item.unit,
             qty_sold: 0,
@@ -142,6 +147,7 @@ export const ReportsScreen: React.FC = () => {
       const cat = categories.find(c => c.id === p.category_id);
       return {
         name: p.name,
+        name_hi: p.name_hi,
         sku: p.sku,
         category: cat ? cat.name : '',
         stock: p.current_stock,
@@ -259,7 +265,7 @@ export const ReportsScreen: React.FC = () => {
       pdf.save(`${table.filename}_${currentBusinessDate}.pdf`);
     } catch (err) {
       console.error('PDF export failed:', err);
-      alert('Could not create the PDF. Please try again.');
+      alert(t('reports.pdfFailed'));
     } finally {
       setIsExportingPDF(false);
     }
@@ -271,10 +277,10 @@ export const ReportsScreen: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900">
-            Parlour Reports & Analytics
+            {t('reports.title')}
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Standard shop operational reports with one-click CSV and PDF export
+            {t('reports.subtitle')}
           </p>
         </div>
 
@@ -285,7 +291,7 @@ export const ReportsScreen: React.FC = () => {
             className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors"
           >
             <Download className="w-4 h-4" />
-            <span>Export Current Report to CSV</span>
+            <span>{t('reports.exportCsv')}</span>
           </button>
           <button
             type="button"
@@ -294,7 +300,7 @@ export const ReportsScreen: React.FC = () => {
             className="flex items-center gap-1.5 px-4 py-2 bg-red-700 hover:bg-red-800 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors disabled:opacity-60"
           >
             <FileText className="w-4 h-4" />
-            <span>{isExportingPDF ? 'Preparing PDF…' : 'Download PDF'}</span>
+            <span>{isExportingPDF ? t('reports.preparingPdf') : t('reports.downloadPdf')}</span>
           </button>
         </div>
       </div>
@@ -309,7 +315,7 @@ export const ReportsScreen: React.FC = () => {
               : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
           }`}
         >
-          Daily Summary
+          {t('reports.tab.daily_summary')}
         </button>
         <button
           onClick={() => setActiveReport('product_sales')}
@@ -319,7 +325,7 @@ export const ReportsScreen: React.FC = () => {
               : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
           }`}
         >
-          Product-wise Sales
+          {t('reports.tab.product_sales')}
         </button>
         <button
           onClick={() => setActiveReport('monthly_sales')}
@@ -329,7 +335,7 @@ export const ReportsScreen: React.FC = () => {
               : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
           }`}
         >
-          Monthly Sales
+          {t('reports.tab.monthly_sales')}
         </button>
         <button
           onClick={() => setActiveReport('expenses')}
@@ -339,7 +345,7 @@ export const ReportsScreen: React.FC = () => {
               : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
           }`}
         >
-          Expenses by Category
+          {t('reports.tab.expenses')}
         </button>
         <button
           onClick={() => setActiveReport('credit_dues')}
@@ -349,7 +355,7 @@ export const ReportsScreen: React.FC = () => {
               : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
           }`}
         >
-          Credit (Udhaar) Dues
+          {t('reports.tab.credit_dues')}
         </button>
         <button
           onClick={() => setActiveReport('current_stock')}
@@ -359,7 +365,7 @@ export const ReportsScreen: React.FC = () => {
               : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
           }`}
         >
-          Stock Valuation
+          {t('reports.tab.current_stock')}
         </button>
       </div>
 
@@ -371,15 +377,15 @@ export const ReportsScreen: React.FC = () => {
             <table className="w-full text-left text-xs font-mono-numbers">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 font-sans">
-                  <th className="py-3 px-4">Date</th>
-                  <th className="py-3 px-4 text-center">Bills</th>
-                  <th className="py-3 px-4 text-right">Cash</th>
-                  <th className="py-3 px-4 text-right">UPI / QR</th>
-                  <th className="py-3 px-4 text-right">Card</th>
-                  <th className="py-3 px-4 text-right">Udhaar Added</th>
-                  <th className="py-3 px-4 text-right font-bold text-slate-900">Total Sales</th>
-                  <th className="py-3 px-4 text-right text-red-600">Expenses</th>
-                  <th className="py-3 px-4 text-right text-blue-600">Dues Collected</th>
+                  <th className="py-3 px-4">{t('common.date')}</th>
+                  <th className="py-3 px-4 text-center">{t('reports.bills')}</th>
+                  <th className="py-3 px-4 text-right">{t('reports.cash')}</th>
+                  <th className="py-3 px-4 text-right">{t('reports.upiQr')}</th>
+                  <th className="py-3 px-4 text-right">{t('reports.card')}</th>
+                  <th className="py-3 px-4 text-right">{t('reports.udhaarAdded')}</th>
+                  <th className="py-3 px-4 text-right font-bold text-slate-900">{t('reports.totalSales')}</th>
+                  <th className="py-3 px-4 text-right text-red-600">{t('reports.expenses')}</th>
+                  <th className="py-3 px-4 text-right text-blue-600">{t('reports.duesCollected')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -411,21 +417,21 @@ export const ReportsScreen: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                  <th className="py-3 px-4">Product Name</th>
-                  <th className="py-3 px-4">Category</th>
-                  <th className="py-3 px-4 text-right font-semibold">Units Sold</th>
-                  <th className="py-3 px-4 text-right font-semibold">Total Revenue</th>
+                  <th className="py-3 px-4">{t('reports.productName')}</th>
+                  <th className="py-3 px-4">{t('common.category')}</th>
+                  <th className="py-3 px-4 text-right font-semibold">{t('reports.unitsSold')}</th>
+                  <th className="py-3 px-4 text-right font-semibold">{t('reports.totalRevenue')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono-numbers">
                 {getProductSalesData().map((p, idx) => (
                   <tr key={idx} className="hover:bg-slate-50">
                     <td className="py-3 px-4 font-sans font-semibold text-slate-900">
-                      {p.product_name}
+                      {nameOf(p.product_id, p.product_name)}
                     </td>
                     <td className="py-3 px-4 font-sans text-slate-600">{p.category}</td>
                     <td className="py-3 px-4 text-right font-bold text-slate-800">
-                      {p.qty_sold} {p.unit}
+                      {p.qty_sold} {unitOf(p.unit)}
                     </td>
                     <td className="py-3 px-4 text-right font-extrabold text-slate-900">
                       ₹{p.revenue.toFixed(2)}
@@ -443,9 +449,9 @@ export const ReportsScreen: React.FC = () => {
             <table className="w-full text-left text-xs font-mono-numbers">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 font-sans">
-                  <th className="py-3 px-4">Month</th>
-                  <th className="py-3 px-4 text-center">Completed Invoices</th>
-                  <th className="py-3 px-4 text-right font-bold text-slate-900">Total Sales Revenue</th>
+                  <th className="py-3 px-4">{t('reports.month')}</th>
+                  <th className="py-3 px-4 text-center">{t('reports.completedInvoices')}</th>
+                  <th className="py-3 px-4 text-right font-bold text-slate-900">{t('reports.totalSalesRevenue')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -469,15 +475,15 @@ export const ReportsScreen: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                  <th className="py-3 px-4">Expense Category</th>
-                  <th className="py-3 px-4 text-center">Number of Entries</th>
-                  <th className="py-3 px-4 text-right font-semibold">Total Amount</th>
+                  <th className="py-3 px-4">{t('reports.expenseCategory')}</th>
+                  <th className="py-3 px-4 text-center">{t('reports.entries')}</th>
+                  <th className="py-3 px-4 text-right font-semibold">{t('reports.totalAmount')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono-numbers">
                 {getExpensesData().map((cat, idx) => (
                   <tr key={idx} className="hover:bg-slate-50">
-                    <td className="py-3 px-4 font-sans font-semibold text-slate-900">{cat.category}</td>
+                    <td className="py-3 px-4 font-sans font-semibold text-slate-900">{tx(`expense.category.${cat.category}`, cat.category)}</td>
                     <td className="py-3 px-4 text-center text-slate-500">{cat.count}</td>
                     <td className="py-3 px-4 text-right font-bold text-red-600">
                       ₹{cat.total.toFixed(2)}
@@ -495,11 +501,11 @@ export const ReportsScreen: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                  <th className="py-3 px-4">Customer Name</th>
-                  <th className="py-3 px-4">Mobile</th>
-                  <th className="py-3 px-4 text-right">Credit Limit</th>
+                  <th className="py-3 px-4">{t('reports.customerName')}</th>
+                  <th className="py-3 px-4">{t('reports.mobile')}</th>
+                  <th className="py-3 px-4 text-right">{t('reports.creditLimit')}</th>
                   <th className="py-3 px-4 text-right font-bold text-slate-900">
-                    Outstanding Udhaar Due
+                    {t('reports.outstanding')}
                   </th>
                 </tr>
               </thead>
@@ -509,7 +515,7 @@ export const ReportsScreen: React.FC = () => {
                     <td className="py-3 px-4 font-sans font-semibold text-slate-900">{c.name}</td>
                     <td className="py-3 px-4 text-slate-500">{c.mobile}</td>
                     <td className="py-3 px-4 text-right text-slate-500">
-                      {c.limit ? `₹${c.limit}` : 'None'}
+                      {c.limit ? `₹${c.limit}` : t('reports.noLimit')}
                     </td>
                     <td className="py-3 px-4 text-right font-extrabold text-amber-900">
                       ₹{c.dues.toFixed(2)}
@@ -527,23 +533,23 @@ export const ReportsScreen: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                  <th className="py-3 px-4">Product Name</th>
-                  <th className="py-3 px-4">SKU</th>
-                  <th className="py-3 px-4">Category</th>
-                  <th className="py-3 px-4 text-right">Current Stock</th>
-                  <th className="py-3 px-4 text-right">Cost Price</th>
-                  <th className="py-3 px-4 text-right">Selling Price</th>
-                  <th className="py-3 px-4 text-right font-bold text-slate-900">Valuation at Cost</th>
+                  <th className="py-3 px-4">{t('reports.productName')}</th>
+                  <th className="py-3 px-4">{t('reports.sku')}</th>
+                  <th className="py-3 px-4">{t('common.category')}</th>
+                  <th className="py-3 px-4 text-right">{t('reports.currentStock')}</th>
+                  <th className="py-3 px-4 text-right">{t('reports.costPrice')}</th>
+                  <th className="py-3 px-4 text-right">{t('reports.sellingPrice')}</th>
+                  <th className="py-3 px-4 text-right font-bold text-slate-900">{t('reports.valuation')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono-numbers">
                 {getStockValuationData().map((p, idx) => (
                   <tr key={idx} className="hover:bg-slate-50">
-                    <td className="py-3 px-4 font-sans font-semibold text-slate-900">{p.name}</td>
+                    <td className="py-3 px-4 font-sans font-semibold text-slate-900">{productLabel(p)}</td>
                     <td className="py-3 px-4 text-slate-500">{p.sku}</td>
                     <td className="py-3 px-4 font-sans text-slate-600">{p.category}</td>
                     <td className="py-3 px-4 text-right font-bold text-slate-800">
-                      {p.stock} {p.unit}
+                      {p.stock} {unitOf(p.unit)}
                     </td>
                     <td className="py-3 px-4 text-right text-slate-600">₹{p.cost.toFixed(2)}</td>
                     <td className="py-3 px-4 text-right text-slate-600">₹{p.selling.toFixed(2)}</td>

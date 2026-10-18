@@ -23,10 +23,12 @@ import { UsersScreen } from './components/users/UsersScreen';
 import { GoLiveChecklist } from './components/testing/GoLiveChecklist';
 import { DeployScreen } from './components/deploy/DeployScreen';
 import { SHOW_DEV_TOOLS } from './lib/firebase';
+import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 
 function AppContent() {
   const [currentTab, setCurrentTab] = useState<NavTab>('pos');
   const { settings, currentUser, can } = useDairy();
+  const { t } = useLanguage();
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900">
@@ -49,8 +51,8 @@ function AppContent() {
         {currentTab === 'audit' && currentUser.role === 'owner' && <AuditLogScreen />}
         {currentTab === 'audit' && currentUser.role !== 'owner' && (
           <div className="p-12 text-center text-slate-500">
-            <p className="font-semibold text-sm">Access Restricted</p>
-            <p className="text-xs mt-1">Audit logs are only accessible to the shop Owner.</p>
+            <p className="font-semibold text-sm">{t('app.accessRestricted')}</p>
+            <p className="text-xs mt-1">{t('app.auditOwnerOnly')}</p>
           </div>
         )}
         {currentTab === 'settings' && currentUser.role === 'owner' && <SettingsScreen />}
@@ -64,14 +66,14 @@ function AppContent() {
         <div className="flex items-center gap-2">
           <span className="font-semibold text-slate-700">{settings.shop_name}</span>
           <span>·</span>
-          <span>Dairy Parlour Lean System V1</span>
+          <span>{t('app.footer.system')}</span>
         </div>
         <div className="flex items-center gap-4 text-[11px]">
-          <span>Single-device POS</span>
+          <span>{t('app.footer.singleDevice')}</span>
           <span>·</span>
-          <span>Offline Fallback Ready</span>
+          <span>{t('app.footer.offline')}</span>
           <span>·</span>
-          <span>Automatic Stock Balancing</span>
+          <span>{t('app.footer.stock')}</span>
         </div>
       </footer>
     </div>
@@ -80,8 +82,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <DairyProvider>
-      <AppContent />
-    </DairyProvider>
+    <LanguageProvider>
+      <DairyProvider>
+        <AppContent />
+      </DairyProvider>
+    </LanguageProvider>
   );
 }

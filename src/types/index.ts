@@ -54,6 +54,7 @@ export interface Product {
   id: string;
   category_id: string;
   name: string;
+  name_hi?: string; // Shown instead of name when the app language is Hindi
   sku: string;
   barcode?: string;
   unit: ProductUnit;

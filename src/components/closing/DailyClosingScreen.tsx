@@ -10,6 +10,7 @@ import {
   Calendar,
   AlertCircle,
 } from 'lucide-react';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 export const DailyClosingScreen: React.FC = () => {
   const {
@@ -22,6 +23,7 @@ export const DailyClosingScreen: React.FC = () => {
     dailyClosings,
     can,
   } = useDairy();
+  const { t } = useLanguage();
 
   const [selectedDate, setSelectedDate] = useState<string>(currentBusinessDate);
   const summary = getDailyCashSummary(selectedDate);
@@ -47,7 +49,7 @@ export const DailyClosingScreen: React.FC = () => {
     setActionError(null);
     const res = await saveDailyClosing(selectedDate, openingFloatInput, actualCashInput, closingNote);
     if (!res.success) {
-      setActionError(res.error || 'Failed to close day');
+      setActionError(res.error || t('closing.closeFailed'));
       return;
     }
   };
@@ -55,12 +57,12 @@ export const DailyClosingScreen: React.FC = () => {
   const handleConfirmReopen = async () => {
     setActionError(null);
     if (!reopenReason.trim()) {
-      setActionError('A mandatory reason is required to re-open a locked business day.');
+      setActionError(t('closing.reasonRequired'));
       return;
     }
     const res = await reopenDailyClosing(selectedDate, reopenReason);
     if (!res.success) {
-      setActionError(res.error || 'Failed to re-open day');
+      setActionError(res.error || t('closing.reopenFailed'));
       return;
     }
     setShowReopenModal(false);
@@ -73,15 +75,15 @@ export const DailyClosingScreen: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900">
-            Daily Cash Reconciliation & Day Closing
+            {t('closing.title')}
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Enforces strict cash drawer balance formula and locks transactions to prevent tampering
+            {t('closing.subtitle')}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-slate-600">Select Date:</label>
+          <label className="text-xs font-semibold text-slate-600">{t('closing.selectDate')}</label>
           <div className="relative">
             <input
               type="date"
@@ -118,12 +120,15 @@ export const DailyClosingScreen: React.FC = () => {
           )}
           <div>
             <h4 className="font-bold text-sm">
-              Day Status for {selectedDate}: {summary.status === 'closed' ? 'CLOSED & LOCKED' : 'OPEN FOR BILLING'}
+              {t('closing.dayStatus', {
+                date: selectedDate,
+                status: summary.status === 'closed' ? t('closing.statusClosed') : t('closing.statusOpen'),
+              })}
             </h4>
             <p className="text-xs opacity-80 mt-0.5">
               {summary.status === 'closed'
-                ? 'Cashiers cannot create, cancel or edit transactions for this date. (Owner re-open is audited).'
-                : 'Transactions and receipts are currently being recorded into cash float.'}
+                ? t('closing.closedHint')
+                : t('closing.openHint')}
             </p>
           </div>
         </div>
@@ -134,7 +139,7 @@ export const DailyClosingScreen: React.FC = () => {
             onClick={() => setShowReopenModal(true)}
             className="px-3 py-1.5 bg-amber-900 hover:bg-amber-800 text-white rounded-lg text-xs font-bold transition-colors shadow-2xs"
           >
-            Re-open Day (Audited)
+            {t('closing.reopenButton')}
           </button>
         )}
       </div>
@@ -152,10 +157,10 @@ export const DailyClosingScreen: React.FC = () => {
           <div>
             <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
               <Calculator className="w-4 h-4 text-slate-600" />
-              <span>Core Expected Cash Formula</span>
+              <span>{t('closing.formulaTitle')}</span>
             </h3>
             <p className="text-xs text-slate-500 font-mono-numbers mt-0.5">
-              Expected Cash = Opening Cash + Cash Sales + Cash from Dues − Cash Expenses
+              {t('closing.formula')}
             </p>
           </div>
         </div>
@@ -163,7 +168,7 @@ export const DailyClosingScreen: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* 1. Opening Cash Float */}
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-            <span className="text-xs font-semibold text-slate-600 block">1. Opening Cash Float</span>
+            <span className="text-xs font-semibold text-slate-600 block">{t('closing.openingFloat')}</span>
             <div className="flex items-center gap-1 mt-1">
               <span className="text-sm font-bold text-slate-500">₹</span>
               <input
@@ -174,49 +179,49 @@ export const DailyClosingScreen: React.FC = () => {
                 className="w-full font-bold font-mono-numbers text-lg bg-white border border-slate-200 rounded px-2 py-0.5 text-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900 disabled:bg-slate-100"
               />
             </div>
-            <span className="text-[11px] text-slate-400 block">Entered in the morning</span>
+            <span className="text-[11px] text-slate-400 block">{t('closing.openingFloatHint')}</span>
           </div>
 
           {/* 2. Cash Sales Today */}
           <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-1">
-            <span className="text-xs font-semibold text-emerald-800 block">2. Cash Sales Total (+)</span>
+            <span className="text-xs font-semibold text-emerald-800 block">{t('closing.cashSales')}</span>
             <span className="text-2xl font-extrabold font-mono-numbers text-emerald-950 block mt-1">
               +₹{summary.cash_sales.toFixed(2)}
             </span>
-            <span className="text-[11px] text-emerald-700 block">From retail customer bills</span>
+            <span className="text-[11px] text-emerald-700 block">{t('closing.cashSalesHint')}</span>
           </div>
 
           {/* 3. Cash Received against Dues */}
           <div className="p-4 bg-blue-50/60 border border-blue-200 rounded-xl space-y-1">
-            <span className="text-xs font-semibold text-blue-800 block">3. Dues Cash Collected (+)</span>
+            <span className="text-xs font-semibold text-blue-800 block">{t('closing.duesCollected')}</span>
             <span className="text-2xl font-extrabold font-mono-numbers text-blue-950 block mt-1">
               +₹{summary.cash_from_dues.toFixed(2)}
             </span>
-            <span className="text-[11px] text-blue-700 block">From Udhaar customer repayments</span>
+            <span className="text-[11px] text-blue-700 block">{t('closing.duesCollectedHint')}</span>
           </div>
 
           {/* 4. Cash Expenses Paid Out */}
           <div className="p-4 bg-red-50/60 border border-red-200 rounded-xl space-y-1">
-            <span className="text-xs font-semibold text-red-800 block">4. Cash Expenses Paid (−)</span>
+            <span className="text-xs font-semibold text-red-800 block">{t('closing.cashExpenses')}</span>
             <span className="text-2xl font-extrabold font-mono-numbers text-red-950 block mt-1">
               −₹{summary.cash_expenses.toFixed(2)}
             </span>
-            <span className="text-[11px] text-red-700 block">Carry bags, repair, wages in cash</span>
+            <span className="text-[11px] text-red-700 block">{t('closing.cashExpensesHint')}</span>
           </div>
         </div>
 
         {/* Other Sales Channels (Non-Cash) */}
         <div className="p-3 bg-slate-50 rounded-lg text-xs flex flex-wrap items-center justify-between gap-4 text-slate-600">
-          <span className="font-semibold text-slate-700">Digital / Credit Sales Today (Bank & Ledger):</span>
+          <span className="font-semibold text-slate-700">{t('closing.digitalSales')}</span>
           <div className="flex items-center gap-6 font-mono-numbers">
             <span>
-              UPI / QR: <strong>₹{summary.upi_sales.toFixed(2)}</strong>
+              {t('closing.upiQr')} <strong>₹{summary.upi_sales.toFixed(2)}</strong>
             </span>
             <span>
-              Card: <strong>₹{summary.card_sales.toFixed(2)}</strong>
+              {t('closing.card')} <strong>₹{summary.card_sales.toFixed(2)}</strong>
             </span>
             <span>
-              Udhaar Added: <strong>₹{summary.credit_sales.toFixed(2)}</strong>
+              {t('closing.udhaarAdded')} <strong>₹{summary.credit_sales.toFixed(2)}</strong>
             </span>
           </div>
         </div>
@@ -225,18 +230,18 @@ export const DailyClosingScreen: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-slate-200">
           {/* Expected Cash Box */}
           <div className="p-4 bg-slate-900 text-white rounded-xl">
-            <span className="text-xs text-slate-400 block font-medium">EXPECTED DRAWER CASH</span>
+            <span className="text-xs text-slate-400 block font-medium">{t('closing.expectedCash')}</span>
             <span className="text-3xl font-extrabold font-mono-numbers mt-1 block tracking-tight">
               ₹{calculatedExpected.toFixed(2)}
             </span>
             <span className="text-[11px] text-slate-400 mt-1 block">
-              Formula: {openingFloatInput} + {summary.cash_sales} + {summary.cash_from_dues} − {summary.cash_expenses}
+              {t('closing.formulaPrefix')} {openingFloatInput} + {summary.cash_sales} + {summary.cash_from_dues} − {summary.cash_expenses}
             </span>
           </div>
 
           {/* Actual Cash Input */}
           <div className="p-4 bg-white border-2 border-slate-300 rounded-xl space-y-1">
-            <label className="text-xs font-bold text-slate-800 block">ACTUAL COUNTED CASH (₹)</label>
+            <label className="text-xs font-bold text-slate-800 block">{t('closing.actualCash')}</label>
             <div className="flex items-center gap-1 mt-1">
               <span className="text-lg font-bold text-slate-400">₹</span>
               <input
@@ -248,7 +253,7 @@ export const DailyClosingScreen: React.FC = () => {
                 className="w-full text-2xl font-bold font-mono-numbers p-1 border-b-2 border-slate-900 focus:outline-none disabled:border-slate-200 disabled:text-slate-500"
               />
             </div>
-            <span className="text-[11px] text-slate-500 block">Physical count of notes & coins</span>
+            <span className="text-[11px] text-slate-500 block">{t('closing.actualCashHint')}</span>
           </div>
 
           {/* Variance / Difference */}
@@ -263,18 +268,18 @@ export const DailyClosingScreen: React.FC = () => {
           >
             <div>
               <span className="text-xs font-bold block uppercase tracking-wider">
-                Variance / Discrepancy
+                {t('closing.variance')}
               </span>
               <span className="text-3xl font-black font-mono-numbers mt-1 block">
-                {variance > 0 ? `+₹${variance}` : variance < 0 ? `-₹${Math.abs(variance)}` : '₹0.00 Exact Match!'}
+                {variance > 0 ? `+₹${variance}` : variance < 0 ? `-₹${Math.abs(variance)}` : t('closing.exactMatch')}
               </span>
             </div>
             <span className="text-[11px] opacity-80 mt-2 block">
               {variance === 0
-                ? '✓ Drawer tally perfectly balanced.'
+                ? t('closing.balanced')
                 : variance > 0
-                ? 'Surplus cash in drawer.'
-                : 'Shortage of cash in drawer.'}
+                ? t('closing.surplus')
+                : t('closing.shortage')}
             </span>
           </div>
         </div>
@@ -283,12 +288,12 @@ export const DailyClosingScreen: React.FC = () => {
         <div className="pt-2 space-y-3">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Daily Closing Remarks / Note
+              {t('closing.remarks')}
             </label>
             <input
               type="text"
               disabled={summary.status === 'closed'}
-              placeholder="e.g. All counts verified, ₹200 denomination shortage explained by..."
+              placeholder={t('closing.remarksPlaceholder')}
               value={closingNote}
               onChange={e => setClosingNote(e.target.value)}
               className="w-full text-xs p-2.5 border border-slate-200 rounded-lg bg-slate-50 disabled:bg-slate-100"
@@ -301,16 +306,16 @@ export const DailyClosingScreen: React.FC = () => {
                 type="button"
                 onClick={handleCloseDay}
                 disabled={!can('daily_closing')}
-                title={can('daily_closing') ? undefined : 'Closing the day is turned off for your account. Ask the Owner.'}
+                title={can('daily_closing') ? undefined : t('closing.permOff')}
                 className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 disabled:bg-slate-400 disabled:cursor-not-allowed"
               >
                 <Lock className="w-4 h-4" />
-                <span>Save Closing & Lock Day</span>
+                <span>{t('closing.saveAndLock')}</span>
               </button>
             ) : (
               <div className="flex items-center gap-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-lg font-medium">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>Day was locked by {summary.status === 'closed' ? 'Owner / Manager' : ''}</span>
+                <span>{t('closing.lockedBy')}</span>
               </div>
             )}
           </div>
@@ -320,20 +325,20 @@ export const DailyClosingScreen: React.FC = () => {
       {/* Historical Daily Closings Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
         <div className="p-4 border-b border-slate-200">
-          <h4 className="font-semibold text-slate-900 text-xs">Past Closing History</h4>
+          <h4 className="font-semibold text-slate-900 text-xs">{t('closing.history')}</h4>
         </div>
         <table className="w-full text-left text-xs font-mono-numbers">
           <thead>
             <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 font-sans">
-              <th className="py-2.5 px-4">Date</th>
-              <th className="py-2.5 px-4 text-right">Opening Float</th>
-              <th className="py-2.5 px-4 text-right">Cash Sales</th>
-              <th className="py-2.5 px-4 text-right">Dues Recd</th>
-              <th className="py-2.5 px-4 text-right">Cash Exp</th>
-              <th className="py-2.5 px-4 text-right">Expected</th>
-              <th className="py-2.5 px-4 text-right">Actual</th>
-              <th className="py-2.5 px-4 text-right">Variance</th>
-              <th className="py-2.5 px-4">Closed By</th>
+              <th className="py-2.5 px-4">{t('common.date')}</th>
+              <th className="py-2.5 px-4 text-right">{t('closing.colOpening')}</th>
+              <th className="py-2.5 px-4 text-right">{t('closing.colCashSales')}</th>
+              <th className="py-2.5 px-4 text-right">{t('closing.colDues')}</th>
+              <th className="py-2.5 px-4 text-right">{t('closing.colCashExp')}</th>
+              <th className="py-2.5 px-4 text-right">{t('closing.colExpected')}</th>
+              <th className="py-2.5 px-4 text-right">{t('closing.colActual')}</th>
+              <th className="py-2.5 px-4 text-right">{t('closing.colVariance')}</th>
+              <th className="py-2.5 px-4">{t('closing.colClosedBy')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -356,7 +361,7 @@ export const DailyClosingScreen: React.FC = () => {
                         : 'text-red-700 bg-red-50'
                     }`}
                   >
-                    {c.difference === 0 ? 'Exact' : `₹${c.difference}`}
+                    {c.difference === 0 ? t('closing.exact') : `₹${c.difference}`}
                   </span>
                 </td>
                 <td className="py-2.5 px-4 text-slate-500 font-sans">{c.closed_by_name}</td>
@@ -372,20 +377,20 @@ export const DailyClosingScreen: React.FC = () => {
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 space-y-4">
             <div className="flex items-center gap-2 text-amber-900">
               <Unlock className="w-5 h-5 text-amber-600" />
-              <h3 className="font-bold text-sm text-slate-900">Re-open Locked Day {selectedDate}?</h3>
+              <h3 className="font-bold text-sm text-slate-900">{t('closing.reopenTitle', { date: selectedDate })}</h3>
             </div>
             <p className="text-xs text-slate-600">
-              Re-opening allows cashiers to make further entries or cancellations. This action is permanently audited.
+              {t('closing.reopenWarning')}
             </p>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Mandatory Reason for Re-opening *
+                {t('closing.reopenReason')}
               </label>
               <textarea
                 rows={2}
                 required
-                placeholder="e.g. Need to enter late evening loose milk crate sale..."
+                placeholder={t('closing.reopenPlaceholder')}
                 value={reopenReason}
                 onChange={e => setReopenReason(e.target.value)}
                 className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-slate-900"
@@ -398,7 +403,7 @@ export const DailyClosingScreen: React.FC = () => {
                 onClick={() => setShowReopenModal(false)}
                 className="px-3 py-1.5 text-slate-600 hover:text-slate-900"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -406,7 +411,7 @@ export const DailyClosingScreen: React.FC = () => {
                 onClick={handleConfirmReopen}
                 className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg disabled:opacity-50"
               >
-                Confirm & Re-open
+                {t('closing.confirmReopen')}
               </button>
             </div>
           </div>
