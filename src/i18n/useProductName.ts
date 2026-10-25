@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useDairy } from '../context/DairyContext';
 import { Product } from '../types';
 import { useLanguage } from './LanguageContext';
+import { unitShort } from '../lib/units';
 
 // Product names follow the language toggle. Bills, purchases and stock movements store an English
 // snapshot (product_name), so nameOf looks the product up by id for its Hindi name, falling back to the snapshot.
@@ -30,6 +31,9 @@ export const useProductName = () => {
   // Units are stored as short codes (pkt, pouch, ...); unknown custom units show as typed
   const unitOf = useCallback((unit: string) => tx(`unit.${unit}`, unit), [tx]);
 
+  // Short codes (P, Pkt, Btl...) stay Latin in both languages; UnitLegend spells them out
+  const unitShortOf = useCallback((unit: string) => unitShort(unit), []);
+
   // Search matches the English or the Hindi name
   const matchesName = useCallback(
     (p: Pick<Product, 'name' | 'name_hi'>, query: string) => {
@@ -39,5 +43,5 @@ export const useProductName = () => {
     []
   );
 
-  return { productLabel, nameOf, unitOf, matchesName };
+  return { productLabel, nameOf, unitOf, unitShortOf, matchesName };
 };

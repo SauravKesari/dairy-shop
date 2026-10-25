@@ -38,3 +38,21 @@ export const isValidQtyForUnit = (qty: number, unit: string) => isLooseUnit(unit
 
 export const wholeQtyError = (name: string, unit: string, qty: number) =>
   translate('err.wholeQty', { name, unit: translateDynamic(`unit.${unit}`, unit), qty });
+
+// Short codes for the stock tables; explained by the unit legend.
+// Crate is "Crt" so it can't be read as crore.
+export const UNIT_SHORT: Record<string, string> = {
+  L: 'L',
+  kg: 'kg',
+  pouch: 'P',
+  pkt: 'Pkt',
+  bottle: 'Btl',
+  piece: 'Pc',
+  cup: 'Cup',
+  tin: 'Tin',
+  crate: 'Crt',
+  '500ml': '500ml',
+};
+
+// Custom units have no short code and show as typed
+export const unitShort = (unit: string) => UNIT_SHORT[unit] ?? unit;
