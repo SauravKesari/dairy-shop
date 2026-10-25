@@ -14,6 +14,10 @@ export default defineStrings(
     'profit.nextPeriod': 'Next {period}',
     'profit.today': 'Today',
     'profit.rebuild': 'Rebuild',
+    'profit.downloadPdf': 'Download PDF',
+    'profit.preparingPdf': 'Preparing PDF...',
+    'profit.downloadPdfTitle': 'Download this period as a PDF report with tables and chart (in English)',
+    'profit.pdfFailed': 'Could not create the PDF. Please try again.',
     'profit.rebuildTitle': 'Recalculate profit from the bills',
     'profit.rebuildHelp':
       'Recalculates profit from the bills for this date range. Use it once after an update to include older bills, or if numbers ever look wrong.',
@@ -79,6 +83,10 @@ export default defineStrings(
     'profit.nextPeriod': 'अगला {period}',
     'profit.today': 'आज',
     'profit.rebuild': 'दोबारा गिनें',
+    'profit.downloadPdf': 'PDF डाउनलोड',
+    'profit.preparingPdf': 'PDF बन रहा है...',
+    'profit.downloadPdfTitle': 'इस समय की रिपोर्ट PDF में डाउनलोड करें, टेबल और ग्राफ़ के साथ (अंग्रेज़ी में)',
+    'profit.pdfFailed': 'PDF नहीं बन पाया। फिर से कोशिश करें।',
     'profit.rebuildTitle': 'बिलों से मुनाफा दोबारा गिनें',
     'profit.rebuildHelp':
       'इन तारीखों के बिलों से मुनाफा दोबारा गिनता है। अपडेट के बाद पुराने बिल जोड़ने के लिए एक बार चलाएं, या जब आंकड़े गलत लगें।',

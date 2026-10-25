@@ -9,7 +9,7 @@ import {
   sumDays,
 } from '../../lib/profit';
 import type { ChartPoint } from './ProfitChart';
-import { TrendingUp, ChevronLeft, ChevronRight, RefreshCw, AlertTriangle, Info } from 'lucide-react';
+import { TrendingUp, ChevronLeft, ChevronRight, RefreshCw, AlertTriangle, Info, FileText } from 'lucide-react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useProductName } from '../../i18n/useProductName';
 
@@ -25,7 +25,7 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 const change = (curr: number, prev: number) => (prev === 0 ? null : ((curr - prev) / Math.abs(prev)) * 100);
 
 export const ProfitScreen: React.FC = () => {
-  const { currentBusinessDate, currentUser, expenses, products, categories, fetchDailyProfit, rebuildDailyProfit } = useDairy();
+  const { currentBusinessDate, currentUser, settings, expenses, products, categories, fetchDailyProfit, rebuildDailyProfit } = useDairy();
   const { t, tx } = useLanguage();
   const { nameOf } = useProductName();
 
@@ -42,6 +42,7 @@ export const ProfitScreen: React.FC = () => {
   const [rebuildTo, setRebuildTo] = useState('');
   const [rebuildMsg, setRebuildMsg] = useState<string | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const [from, to] = periodRange(period, anchor);
   const [prevFrom, prevTo] = periodRange(period, shiftPeriod(period, anchor, -1));
@@ -139,6 +140,46 @@ export const ProfitScreen: React.FC = () => {
     }
     setRebuildMsg(t('profit.rebuilt', { days: res.days ?? 0, bills: res.bills ?? 0 }));
     setReloadKey(k => k + 1);
+  };
+
+  // PDF of exactly what the screen shows for the chosen period. The PDF fonts can't draw Hindi, so it
+  // uses English labels and the English product names stored on the bills.
+  const handleDownloadPdf = async () => {
+    if (exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      const { downloadProfitPdf } = await import('./profitPdf');
+      await downloadProfitPdf({
+        shopName: settings.shop_name || 'Dairy Shop',
+        periodTitle: periodLabel(period, anchor),
+        generatedOn: currentBusinessDate,
+        summary: [
+          { label: 'Sales (before GST)', current: current.revenue, previous: previous.revenue },
+          { label: 'Cost of goods sold', current: current.cost, previous: previous.cost },
+          { label: 'Gross profit', current: gross, previous: prevGross },
+          { label: 'Expenses', current: exp, previous: prevExp },
+          { label: 'Net profit', current: net, previous: prevNet },
+        ],
+        marginPct: margin,
+        bills: current.bills,
+        chartTitle: period === 'day' ? 'Gross profit by category' : period === 'month' ? 'Profit by day' : 'Profit by month',
+        chartColumn: period === 'day' ? 'Category' : period === 'month' ? 'Day' : 'Month',
+        // Month names come from the language toggle and the "other" category is translated, so swap in English
+        chart: chartData.map((d, i) => ({
+          ...d,
+          label: period === 'year' ? MONTHS[i] : /[^\x20-\x7E]/.test(d.label) ? 'Other' : d.label,
+        })),
+        showNet: period !== 'day',
+        topProducts: topProducts.map(p => ({ name: p.name, qty: p.qty, revenue: p.revenue, profit: p.profit })),
+        belowCost: belowCost.map(p => ({ name: p.name, qty: p.qty, revenue: p.revenue, cost: p.cost, profit: p.profit })),
+        filename: `profit_report_${period}_${from}${from === to ? '' : `_to_${to}`}.pdf`,
+      });
+    } catch (err) {
+      console.error('Profit PDF export failed:', err);
+      setError(t('profit.pdfFailed'));
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   const card = (title: string, value: number, prev: number, opts: { hint?: string; tone?: 'profit' | 'cost' } = {}) => {
@@ -254,6 +295,17 @@ export const ProfitScreen: React.FC = () => {
             className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-semibold text-slate-700 hover:bg-slate-50"
           >
             {t('profit.today')}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={exportingPdf || loading}
+            className="px-3 py-1.5 bg-red-700 hover:bg-red-800 text-white rounded-lg font-semibold flex items-center gap-1 disabled:opacity-60"
+            title={t('profit.downloadPdfTitle')}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>{exportingPdf ? t('profit.preparingPdf') : t('profit.downloadPdf')}</span>
           </button>
 
           {currentUser.role === 'owner' && (
