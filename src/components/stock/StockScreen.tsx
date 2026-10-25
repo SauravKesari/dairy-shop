@@ -2,8 +2,10 @@ import React, { useState, useMemo } from 'react';
 import { useDairy } from '../../context/DairyContext';
 import { Product, StockMovement } from '../../types';
 import { isLooseUnit, qtyStep, parseQty } from '../../lib/units';
+import { formatCompactINR, formatCompactNumber, formatINR } from '../../lib/format';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { useProductName } from '../../i18n/useProductName';
+import { UnitLegend } from './UnitLegend';
 import {
   Boxes,
   AlertTriangle,
@@ -27,7 +29,11 @@ export const StockScreen: React.FC = () => {
     adjustStock,
   } = useDairy();
   const { t, tx } = useLanguage();
-  const { productLabel, nameOf, unitOf, matchesName } = useProductName();
+  const { productLabel, nameOf, unitOf, unitShortOf, matchesName } = useProductName();
+
+  // Short unit code (P, Pkt, Btl...) so long stock figures stay exact without stretching the column;
+  // UnitLegend under the table spells them out, and hovering shows the full name
+  const unitText = (unit: string) => <abbr title={unitOf(unit)} className="no-underline">{unitShortOf(unit)}</abbr>;
 
   const [activeTab, setActiveTab] = useState<'inventory' | 'expiry' | 'movements'>('inventory');
   const [searchQuery, setSearchQuery] = useState('');
@@ -148,21 +154,30 @@ export const StockScreen: React.FC = () => {
       </div>
 
       {/* KPI Cards Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-2xs min-w-0">
           <span className="text-xs text-slate-500 block">{t('stock.kpi.value')}</span>
-          <span className="text-2xl font-bold font-mono-numbers text-slate-900 mt-1 block">
-            ₹{totalValuationCost.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+          <span
+            className="text-lg sm:text-2xl md:text-xl xl:text-2xl font-bold font-mono-numbers text-slate-900 mt-1 block truncate"
+            title={formatINR(totalValuationCost)}
+          >
+            {/* Cards share a 4-column row from md, so the full figure only fits from xl */}
+            <span className="xl:hidden">{formatCompactINR(totalValuationCost)}</span>
+            <span className="hidden xl:inline">{formatINR(totalValuationCost)}</span>
           </span>
           <span className="text-[11px] text-slate-400 mt-0.5 block">
             {t('stock.kpi.valueHint', { count: totalSKUs })}
           </span>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+        <div className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-2xs min-w-0">
           <span className="text-xs text-slate-500 block">{t('stock.kpi.units')}</span>
-          <span className="text-2xl font-bold font-mono-numbers text-slate-900 mt-1 block">
-            {totalStockUnits.toFixed(1)}
+          <span
+            className="text-lg sm:text-2xl md:text-xl xl:text-2xl font-bold font-mono-numbers text-slate-900 mt-1 block truncate"
+            title={totalStockUnits.toLocaleString('en-IN', { maximumFractionDigits: 1 })}
+          >
+            <span className="xl:hidden">{formatCompactNumber(totalStockUnits)}</span>
+            <span className="hidden xl:inline">{totalStockUnits.toFixed(1)}</span>
           </span>
           <span className="text-[11px] text-slate-400 mt-0.5 block">{t('stock.kpi.unitsHint')}</span>
         </div>
@@ -172,13 +187,13 @@ export const StockScreen: React.FC = () => {
             setActiveTab('inventory');
             setLowStockOnly(true);
           }}
-          className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs cursor-pointer hover:border-amber-400 transition-colors"
+          className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-2xs min-w-0 cursor-pointer hover:border-amber-400 transition-colors"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500">{t('stock.kpi.low')}</span>
             <AlertTriangle className="w-4 h-4 text-amber-500" />
           </div>
-          <span className="text-2xl font-bold font-mono-numbers text-amber-600 mt-1 block">
+          <span className="text-lg sm:text-2xl font-bold font-mono-numbers text-amber-600 mt-1 block truncate">
             {t('stock.kpi.items', { count: lowStockCount })}
           </span>
           <span className="text-[11px] text-slate-400 mt-0.5 block">{t('stock.kpi.lowHint')}</span>
@@ -186,13 +201,13 @@ export const StockScreen: React.FC = () => {
 
         <div
           onClick={() => setActiveTab('expiry')}
-          className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs cursor-pointer hover:border-red-400 transition-colors"
+          className="bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-2xs min-w-0 cursor-pointer hover:border-red-400 transition-colors"
         >
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500">{t('stock.kpi.expiring')}</span>
             <Clock className="w-4 h-4 text-red-500" />
           </div>
-          <span className="text-2xl font-bold font-mono-numbers text-red-600 mt-1 block">
+          <span className="text-lg sm:text-2xl font-bold font-mono-numbers text-red-600 mt-1 block truncate">
             {t('stock.kpi.items', { count: expiringCount })}
           </span>
           <span className="text-[11px] text-slate-400 mt-0.5 block">{t('stock.kpi.expiringHint')}</span>
@@ -243,20 +258,20 @@ export const StockScreen: React.FC = () => {
             </div>
           </div>
 
-          {/* Inventory Table */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+          {/* Inventory Table: scrolls sideways on small screens with the product name pinned */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                  <th className="py-3 px-4 font-semibold">{t('stock.col.productName')}</th>
-                  <th className="py-3 px-4 font-semibold">{t('stock.col.sku')}</th>
-                  <th className="py-3 px-4 font-semibold">{t('common.category')}</th>
-                  <th className="py-3 px-4 text-right font-semibold">{t('stock.col.costPrice')}</th>
-                  <th className="py-3 px-4 text-right font-semibold">{t('stock.col.sellingPrice')}</th>
-                  <th className="py-3 px-4 text-right font-semibold">{t('stock.col.currentStock')}</th>
-                  <th className="py-3 px-4 text-right font-semibold">{t('stock.col.minStock')}</th>
-                  <th className="py-3 px-4 text-right font-semibold">{t('stock.col.valuation')}</th>
-                  <th className="py-3 px-4 text-center font-semibold">{t('common.actions')}</th>
+                <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 whitespace-nowrap">
+                  <th className="py-3 px-2 sm:px-4 font-semibold sticky left-0 z-10 bg-slate-50 shadow-[1px_0_0_#e2e8f0] lg:shadow-none">{t('stock.col.productName')}</th>
+                  <th className="py-3 px-2 sm:px-4 font-semibold hidden lg:table-cell">{t('stock.col.sku')}</th>
+                  <th className="py-3 px-2 sm:px-4 font-semibold hidden lg:table-cell">{t('common.category')}</th>
+                  <th className="py-3 px-2 sm:px-4 text-right font-semibold">{t('stock.col.costPrice')}</th>
+                  <th className="py-3 px-2 sm:px-4 text-right font-semibold">{t('stock.col.sellingPrice')}</th>
+                  <th className="py-3 px-2 sm:px-4 text-right font-semibold">{t('stock.col.currentStock')}</th>
+                  <th className="py-3 px-2 sm:px-4 text-right font-semibold hidden md:table-cell">{t('stock.col.minStock')}</th>
+                  <th className="py-3 px-2 sm:px-4 text-right font-semibold">{t('stock.col.valuation')}</th>
+                  <th className="py-3 px-2 sm:px-4 text-center font-semibold">{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -266,24 +281,29 @@ export const StockScreen: React.FC = () => {
                   const valuation = product.current_stock * product.purchase_price;
 
                   return (
-                    <tr key={product.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3 px-4 font-semibold text-slate-900">
+                    <tr key={product.id} className="group hover:bg-slate-50 transition-colors">
+                      <td className="py-3 px-2 sm:px-4 font-semibold text-slate-900 sticky left-0 z-10 bg-white group-hover:bg-slate-50 shadow-[1px_0_0_#e2e8f0] lg:shadow-none min-w-[7.5rem] max-w-[8.5rem] sm:max-w-[12rem] lg:max-w-none">
                         {productLabel(product)}
                         {product.track_expiry && (
-                          <span className="ml-1.5 text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-normal">
+                          <span className="ml-1.5 text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded font-normal whitespace-nowrap">
                             {t('stock.expiryTracked')}
                           </span>
                         )}
+                        {/* SKU & category columns are hidden below lg, so show them under the name */}
+                        <span className="lg:hidden block mt-0.5 text-[10px] font-normal text-slate-400 truncate">
+                          <span className="font-mono-numbers">{product.sku}</span>
+                          {cat && <> · {cat.name}</>}
+                        </span>
                       </td>
-                      <td className="py-3 px-4 font-mono-numbers text-slate-500">{product.sku}</td>
-                      <td className="py-3 px-4 text-slate-600">{cat ? cat.name : '—'}</td>
-                      <td className="py-3 px-4 text-right font-mono-numbers text-slate-600">
+                      <td className="py-3 px-2 sm:px-4 font-mono-numbers text-slate-500 whitespace-nowrap hidden lg:table-cell">{product.sku}</td>
+                      <td className="py-3 px-2 sm:px-4 text-slate-600 hidden lg:table-cell">{cat ? cat.name : '—'}</td>
+                      <td className="py-3 px-2 sm:px-4 text-right font-mono-numbers text-slate-600 whitespace-nowrap">
                         ₹{product.purchase_price.toFixed(2)}
                       </td>
-                      <td className="py-3 px-4 text-right font-mono-numbers font-semibold text-slate-900">
+                      <td className="py-3 px-2 sm:px-4 text-right font-mono-numbers font-semibold text-slate-900 whitespace-nowrap">
                         ₹{product.selling_price.toFixed(2)}
                       </td>
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-3 px-2 sm:px-4 text-right whitespace-nowrap">
                         <span
                           className={`font-bold font-mono-numbers px-2 py-0.5 rounded ${
                             product.current_stock <= 0
@@ -293,16 +313,18 @@ export const StockScreen: React.FC = () => {
                               : 'text-slate-900'
                           }`}
                         >
-                          {product.current_stock} {unitOf(product.unit)}
+                          {product.current_stock} {unitText(product.unit)}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right font-mono-numbers text-slate-400">
-                        {product.min_stock} {unitOf(product.unit)}
+                      <td className="py-3 px-2 sm:px-4 text-right font-mono-numbers text-slate-400 whitespace-nowrap hidden md:table-cell">
+                        {product.min_stock} {unitText(product.unit)}
                       </td>
-                      <td className="py-3 px-4 text-right font-mono-numbers font-medium text-slate-800">
-                        ₹{valuation.toFixed(2)}
+                      <td className="py-3 px-2 sm:px-4 text-right font-mono-numbers font-medium text-slate-800 whitespace-nowrap">
+                        {/* Paise dropped below md to keep the column narrow */}
+                        <span className="md:hidden">{formatINR(valuation)}</span>
+                        <span className="hidden md:inline">{formatINR(valuation, 2)}</span>
                       </td>
-                      <td className="py-3 px-4 text-center">
+                      <td className="py-3 px-2 sm:px-4 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
                             type="button"
@@ -337,6 +359,7 @@ export const StockScreen: React.FC = () => {
               </tbody>
             </table>
           </div>
+          <UnitLegend units={filteredProducts.map(p => p.unit)} />
         </div>
       )}
 
@@ -408,10 +431,10 @@ export const StockScreen: React.FC = () => {
           </div>
 
           {/* Expiry Alerts Table */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 whitespace-nowrap">
                   <th className="py-3 px-4 font-semibold">{t('common.product')}</th>
                   <th className="py-3 px-4 font-semibold">{t('common.category')}</th>
                   <th className="py-3 px-4 font-semibold">{t('stock.col.stockOnHand')}</th>
@@ -437,13 +460,13 @@ export const StockScreen: React.FC = () => {
                           {nameOf(alert.product_id, alert.product_name)}
                         </td>
                         <td className="py-3 px-4 text-slate-600">{alert.category_name}</td>
-                        <td className="py-3 px-4 font-bold font-mono-numbers text-slate-800">
-                          {alert.current_stock} {unitOf(alert.unit)}
+                        <td className="py-3 px-4 font-bold font-mono-numbers text-slate-800 whitespace-nowrap">
+                          {alert.current_stock} {unitText(alert.unit)}
                         </td>
-                        <td className="py-3 px-4 font-mono-numbers text-slate-900 font-semibold">
+                        <td className="py-3 px-4 font-mono-numbers text-slate-900 font-semibold whitespace-nowrap">
                           {alert.expiry_date}
                         </td>
-                        <td className="py-3 px-4">
+                        <td className="py-3 px-4 whitespace-nowrap">
                           {alert.status === 'expired' ? (
                             <span className="bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded text-[11px]">
                               {t('stock.expiredAgo', { days: Math.abs(alert.days_remaining) })}
@@ -494,6 +517,7 @@ export const StockScreen: React.FC = () => {
               </tbody>
             </table>
           </div>
+          <UnitLegend units={filteredExpiryAlerts.map(a => a.unit)} />
         </div>
       )}
 
@@ -509,10 +533,10 @@ export const StockScreen: React.FC = () => {
             </span>
           </div>
 
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 whitespace-nowrap">
                   <th className="py-3 px-4 font-semibold">{t('stock.col.timestamp')}</th>
                   <th className="py-3 px-4 font-semibold">{t('common.product')}</th>
                   <th className="py-3 px-4 font-semibold">{t('stock.col.eventType')}</th>
